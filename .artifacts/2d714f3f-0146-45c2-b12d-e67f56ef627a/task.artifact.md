@@ -1,0 +1,8 @@
+- [ ] Install Capacitor dependencies
+- [ ] Initialize Capacitor
+- [ ] Create `capacitor.config.ts`
+- [ ] Add Android platform
+- [ ] Build the web application
+- [ ] Sync assets to Android project
+- [ ] Generate APK using Gradle
+- [ ] Verify and provide APK path
