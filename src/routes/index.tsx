@@ -1095,7 +1095,7 @@ function BarRow({
     <div>
       <div className="text-[14px] text-white">{label}</div>
       <div className="mt-2 flex items-center gap-3">
-        <div className="h-[9px] flex-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full"
             style={{ width: `${pct}%`, background: color }}
@@ -1132,7 +1132,7 @@ function CountryRow({
         className="text-[15px] text-white"
       />
       <div className="mt-2 flex items-center gap-3">
-        <div className="h-[9px] flex-1 overflow-hidden rounded-full bg-white/10">
+        <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full"
             style={{ width: `${pct}%`, background: color }}
