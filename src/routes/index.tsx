@@ -1321,7 +1321,7 @@ function EditableLineChart({
           d={pathFromPoints(main, width)}
           fill="none"
           stroke="#eb22d4"
-          strokeWidth="5"
+          strokeWidth="3.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -1422,7 +1422,7 @@ function EditableSingleChart({
           d={pathFromPoints(data, width)}
           fill="none"
           stroke="#eb22d4"
-          strokeWidth="5.5"
+          strokeWidth="3.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
