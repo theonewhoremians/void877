@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Info,
   MoreVertical,
-  Play,
   TrendingUp,
   ChevronRight,
 } from "lucide-react";
@@ -1167,9 +1166,6 @@ function MediaChart({
             className="h-full w-full object-cover"
             loading="lazy"
           />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Play className="h-9 w-9 text-white drop-shadow" fill="white" />
-          </div>
         </div>
       </div>
       {children}
