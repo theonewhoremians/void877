@@ -186,16 +186,6 @@ var Info = createLucideIcon("info", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
-var Play = createLucideIcon("play", [["path", {
-	d: "M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z",
-	key: "10ikf1"
-}]]);
-/**
-* @license lucide-react v0.575.0 - ISC
-*
-* This source code is licensed under the ISC license.
-* See the LICENSE file in the root directory of this source tree.
-*/
 var TrendingUp = createLucideIcon("trending-up", [["path", {
 	d: "M16 7h6v6",
 	key: "box55l"
@@ -204,4 +194,4 @@ var TrendingUp = createLucideIcon("trending-up", [["path", {
 	key: "1t1m79"
 }]]);
 //#endregion
-export { ChevronRight as a, EllipsisVertical as i, Play as n, ArrowLeft as o, Info as r, TrendingUp as t };
+export { ArrowLeft as a, ChevronRight as i, Info as n, EllipsisVertical as r, TrendingUp as t };

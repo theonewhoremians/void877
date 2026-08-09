@@ -45,6 +45,7 @@ const defaultLikes = [
 
 const defaultData = {
   title: "Reel Insights",
+  accountsReachedLabel: "Accounts reached",
   likes: "739",
   comments: "5",
   reposts: "34",
@@ -255,6 +256,7 @@ function ReelInsightsPage() {
   const [savedToast, setSavedToast] = useState(false);
   const [editing, setEditing] = useState(true);
   const [thumb, setThumb] = useState<string>(reelThumb);
+  const [hasImportedThumbnail, setHasImportedThumbnail] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [reelUrl, setReelUrl] = useState("");
   const [importError, setImportError] = useState("");
@@ -321,6 +323,7 @@ function ReelInsightsPage() {
     try {
       const storedThumb = localStorage.getItem("reel-insights-thumb");
       if (storedThumb) setThumb(storedThumb);
+      setHasImportedThumbnail(localStorage.getItem("reel-insights-imported-thumb") === "true");
     } catch {}
   }, []);
 
@@ -333,8 +336,10 @@ function ReelInsightsPage() {
     reader.onload = () => {
       const image = String(reader.result);
       setThumb(image);
+      setHasImportedThumbnail(false);
       try {
         localStorage.setItem("reel-insights-thumb", image);
+        localStorage.removeItem("reel-insights-imported-thumb");
       } catch {}
     };
     reader.readAsDataURL(file);
@@ -386,7 +391,9 @@ function ReelInsightsPage() {
       save(next);
       if (imported.thumbnail) {
         setThumb(imported.thumbnail);
+        setHasImportedThumbnail(true);
         localStorage.setItem("reel-insights-thumb", imported.thumbnail);
+        localStorage.setItem("reel-insights-imported-thumb", "true");
       }
       setImportNotice("Reel details imported.");
     } catch (error) {
@@ -398,14 +405,14 @@ function ReelInsightsPage() {
 
   return (
     <div
-      className="min-h-screen bg-black text-white"
+      className="min-h-screen bg-black text-zinc-100"
       style={{ fontFamily: "'Roboto', system-ui, -apple-system, sans-serif" }}
     >
       <div className="mx-auto max-w-md pb-24">
         <header className="sticky top-0 z-20 flex items-center gap-3 bg-black/95 px-4 pb-3 pt-4 backdrop-blur">
           <button
             aria-label="Back"
-            className="-ml-1 p-1 text-white/90 hover:text-white"
+            className="-ml-1 p-1 text-white/75 hover:text-zinc-100"
           >
             <ArrowLeft className="h-6 w-6" strokeWidth={2.25} />
           </button>
@@ -423,29 +430,37 @@ function ReelInsightsPage() {
               ariaLabel="Page title"
             />
           </button>
-          <button aria-label="Trends" className="p-1 text-white/90">
+          <button aria-label="Trends" className="p-1 text-white/75 hover:text-zinc-100">
             <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
           </button>
-          <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-white/90">
+          <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-white/75 hover:text-zinc-100">
             <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
           </button>
         </header>
         <div className="flex justify-center pt-4">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="group relative h-[190px] w-[130px] overflow-hidden rounded-2xl shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]"
-            aria-label="Change thumbnail"
-          >
+          {hasImportedThumbnail ? (
             <img
               src={thumb}
-              alt="Reel thumbnail"
-              className="h-full w-full object-cover"
+              alt="Imported reel thumbnail"
+              className="h-[190px] w-[130px] object-cover"
             />
-            <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100">
-              Change photo
-            </span>
-          </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="group relative h-[190px] w-[130px] overflow-hidden rounded-2xl shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]"
+              aria-label="Change thumbnail"
+            >
+              <img
+                src={thumb}
+                alt="Reel thumbnail"
+                className="h-full w-full object-cover"
+              />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100">
+                Change photo
+              </span>
+            </button>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -488,7 +503,7 @@ function ReelInsightsPage() {
               onClick={() => setTab(item)}
               className={
                 "relative py-3 text-[15px] font-medium " +
-                (tab === item ? "text-white" : "text-white/50")
+                (tab === item ? "text-zinc-100" : "text-white/45")
               }
             >
               {item}
@@ -509,9 +524,10 @@ function ReelInsightsPage() {
                   onChange={(value) => set("views", value)}
                 />
                 <SummaryCard
-                  label="Accounts reached"
+                  label={data.accountsReachedLabel}
                   value={data.reached}
                   onChange={(value) => set("reached", value)}
+                  onLabelChange={(value) => set("accountsReachedLabel", value)}
                 />
                 <SummaryCard
                   label="Average watch time"
@@ -536,7 +552,7 @@ function ReelInsightsPage() {
                           "rounded-full border px-4 py-1.5 text-[13px] font-medium " +
                           (viewsTab === item
                             ? "border-white bg-white text-black"
-                            : "border-white/20 bg-transparent text-white/90")
+                            : "border-white/20 bg-transparent text-white/75")
                         }
                       >
                         {item}
@@ -568,7 +584,7 @@ function ReelInsightsPage() {
                     )
                   }
                 />
-                <div className="mt-3 flex items-center gap-4 text-[12px] text-white">
+                <div className="mt-3 flex items-center gap-4 text-[12px] text-white/80">
                   <span className="flex items-center gap-1.5">
                     <span
                       className="h-2 w-2 rounded-full"
@@ -584,7 +600,7 @@ function ReelInsightsPage() {
               </div>
               <div className="mt-8">
                 <SectionTitle>What impacts your views</SectionTitle>
-                <p className="mt-1 text-[13px] text-white">
+                <p className="mt-1 text-[13px] text-white/75">
                   Rates are listed in order of importance to reach.
                 </p>
                 <div className="mt-4 divide-y divide-white/5">
@@ -1010,18 +1026,29 @@ function SummaryCard({
   label,
   value,
   onChange,
+  onLabelChange,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  onLabelChange?: (value: string) => void;
 }) {
   return (
     <div className="rounded-2xl bg-white/[0.06] px-4 py-3.5">
-      <div className="text-[13px] text-white">{label}</div>
+      {onLabelChange ? (
+        <Editable
+          value={label}
+          onChange={onLabelChange}
+          className="text-[13px] text-white/80"
+          ariaLabel="Accounts reached heading"
+        />
+      ) : (
+        <div className="text-[13px] text-white/80">{label}</div>
+      )}
       <Editable
         value={value}
         onChange={onChange}
-        className="mt-1 block text-[22px] font-semibold tracking-tight"
+        className="mt-1 block text-[22px] font-semibold tracking-tight text-white/90"
       />
     </div>
   );

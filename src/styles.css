@@ -148,7 +148,7 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-weight: 500;
+    font-weight: 400;
     -ms-overflow-style: none;
   }
 }
