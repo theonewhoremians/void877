@@ -153,7 +153,7 @@ function useLocalData() {
 
 function AccessGate() {
   return (
-    <main className="grid min-h-screen place-items-center bg-zinc-950 p-6 text-white">
+    <main className="grid min-h-screen place-items-center bg-[#0c0f14] p-6 text-white">
       <div className="text-center">
         <p className="text-xs font-semibold uppercase tracking-[.2em] text-fuchsia-400">
           EditFlow
@@ -405,11 +405,11 @@ function ReelInsightsPage() {
 
   return (
     <div
-      className="min-h-screen bg-black text-zinc-100"
+      className="min-h-screen bg-[#0c0f14] text-zinc-100"
       style={{ fontFamily: "'Roboto', system-ui, -apple-system, sans-serif" }}
     >
       <div className="mx-auto max-w-md pb-24">
-        <header className="sticky top-0 z-20 flex items-center gap-3 bg-black/95 px-4 pb-3 pt-4 backdrop-blur">
+        <header className="sticky top-0 z-20 flex items-center gap-3 bg-[#0c0f14]/95 px-4 pb-3 pt-4 backdrop-blur">
           <button
             aria-label="Back"
             className="-ml-1 p-1 text-white/75 hover:text-zinc-100"
@@ -1034,7 +1034,7 @@ function SummaryCard({
   onLabelChange?: (value: string) => void;
 }) {
   return (
-    <div className="rounded-2xl bg-white/[0.06] px-4 py-3.5">
+    <div className="rounded-2xl bg-[#25282d] px-4 py-3.5">
       {onLabelChange ? (
         <Editable
           value={label}

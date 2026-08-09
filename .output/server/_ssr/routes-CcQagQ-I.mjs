@@ -3,7 +3,7 @@ import { a as loadSession, i as getLicenseStatus, n as clearSession } from "./li
 import { n as require_jsx_runtime, r as require_react } from "../_libs/react+tanstack__react-query.mjs";
 import { g as useNavigate } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as ArrowLeft, i as ChevronRight, n as Info, r as EllipsisVertical, t as TrendingUp } from "../_libs/lucide-react.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-CypwGW2y.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-CcQagQ-I.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var reel_thumb_default = "/assets/reel-thumb-tRQHh08Z.jpg";
@@ -210,7 +210,7 @@ function useLocalData() {
 }
 function AccessGate() {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
-		className: "grid min-h-screen place-items-center bg-zinc-950 p-6 text-white",
+		className: "grid min-h-screen place-items-center bg-[#0c0f14] p-6 text-white",
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "text-center",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -300,11 +300,13 @@ function ReelInsightsPage() {
 	const [savedToast, setSavedToast] = (0, import_react.useState)(false);
 	const [editing, setEditing] = (0, import_react.useState)(true);
 	const [thumb, setThumb] = (0, import_react.useState)(reel_thumb_default);
+	const [hasImportedThumbnail, setHasImportedThumbnail] = (0, import_react.useState)(false);
 	const [isImportOpen, setIsImportOpen] = (0, import_react.useState)(false);
 	const [reelUrl, setReelUrl] = (0, import_react.useState)("");
 	const [importError, setImportError] = (0, import_react.useState)("");
 	const [importNotice, setImportNotice] = (0, import_react.useState)("");
 	const [isImporting, setIsImporting] = (0, import_react.useState)(false);
+	const fileRef = (0, import_react.useRef)(null);
 	(0, import_react.useEffect)(() => {
 		let active = true;
 		const revokeAccess = () => {
@@ -354,9 +356,25 @@ function ReelInsightsPage() {
 		try {
 			const storedThumb = localStorage.getItem("reel-insights-thumb");
 			if (storedThumb) setThumb(storedThumb);
+			setHasImportedThumbnail(localStorage.getItem("reel-insights-imported-thumb") === "true");
 		} catch {}
 	}, []);
 	if (access !== "allowed") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AccessGate, {});
+	const onPickThumb = (event) => {
+		const file = event.target.files?.[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = () => {
+			const image = String(reader.result);
+			setThumb(image);
+			setHasImportedThumbnail(false);
+			try {
+				localStorage.setItem("reel-insights-thumb", image);
+				localStorage.removeItem("reel-insights-imported-thumb");
+			} catch {}
+		};
+		reader.readAsDataURL(file);
+	};
 	const handleHeaderSave = () => {
 		if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
 		save(data);
@@ -406,7 +424,9 @@ function ReelInsightsPage() {
 			save(next);
 			if (imported.thumbnail) {
 				setThumb(imported.thumbnail);
+				setHasImportedThumbnail(true);
 				localStorage.setItem("reel-insights-thumb", imported.thumbnail);
+				localStorage.setItem("reel-insights-imported-thumb", "true");
 			}
 			setImportNotice("Reel details imported.");
 		} catch (error) {
@@ -416,14 +436,14 @@ function ReelInsightsPage() {
 		}
 	};
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "min-h-screen bg-black text-zinc-100",
+		className: "min-h-screen bg-[#0c0f14] text-zinc-100",
 		style: { fontFamily: "'Roboto', system-ui, -apple-system, sans-serif" },
 		children: [
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "mx-auto max-w-md pb-24",
 				children: [
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", {
-						className: "sticky top-0 z-20 flex items-center gap-3 bg-black/95 px-4 pb-3 pt-4 backdrop-blur",
+						className: "sticky top-0 z-20 flex items-center gap-3 bg-[#0c0f14]/95 px-4 pb-3 pt-4 backdrop-blur",
 						children: [
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 								"aria-label": "Back",
@@ -465,13 +485,32 @@ function ReelInsightsPage() {
 							})
 						]
 					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "flex justify-center pt-4",
-						children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+						children: [hasImportedThumbnail ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
 							src: thumb,
-							alt: "Reel thumbnail",
+							alt: "Imported reel thumbnail",
 							className: "h-[190px] w-[130px] object-cover"
-						})
+						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							onClick: () => fileRef.current?.click(),
+							className: "group relative h-[190px] w-[130px] overflow-hidden rounded-2xl shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]",
+							"aria-label": "Change thumbnail",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+								src: thumb,
+								alt: "Reel thumbnail",
+								className: "h-full w-full object-cover"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100",
+								children: "Change photo"
+							})]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+							ref: fileRef,
+							type: "file",
+							accept: "image/*",
+							className: "hidden",
+							onChange: onPickThumb
+						})]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "mt-5 grid grid-cols-5 gap-2 px-6",
@@ -1058,7 +1097,7 @@ function StatIcon({ icon, value, onChange }) {
 }
 function SummaryCard({ label, value, onChange, onLabelChange }) {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "rounded-2xl bg-white/[0.06] px-4 py-3.5",
+		className: "rounded-2xl bg-[#25282d] px-4 py-3.5",
 		children: [onLabelChange ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Editable, {
 			value: label,
 			onChange: onLabelChange,
