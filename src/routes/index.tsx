@@ -115,6 +115,10 @@ const defaultData = {
   viewsTypical: defaultViewsTypical,
   watch: defaultWatch,
   likesOverTime: defaultLikes,
+  viewsMainVisibleUntil: -1,
+  viewsTypicalVisibleUntil: -1,
+  watchVisibleUntil: -1,
+  likesVisibleUntil: -1,
 };
 
 type DataShape = typeof defaultData;
@@ -610,6 +614,10 @@ function ReelInsightsPage() {
                     setEditing(true);
                     set("viewsTypical", value);
                   }}
+                  mainVisibleUntil={data.viewsMainVisibleUntil}
+                  typicalVisibleUntil={data.viewsTypicalVisibleUntil}
+                  onMainVisibleUntil={(value) => set("viewsMainVisibleUntil", value)}
+                  onTypicalVisibleUntil={(value) => set("viewsTypicalVisibleUntil", value)}
                   showHandles={editing}
                   yTop={data.chartMax}
                   yMid={data.chartMid}
@@ -727,6 +735,8 @@ function ReelInsightsPage() {
                     setEditing(true);
                     set("watch", value);
                   }}
+                  visibleUntil={data.watchVisibleUntil}
+                  onVisibleUntil={(value) => set("watchVisibleUntil", value)}
                   showHandles={editing}
                   yTop={data.watchYTop}
                   yMid={data.watchYMid}
@@ -842,6 +852,8 @@ function ReelInsightsPage() {
                     setEditing(true);
                     set("likesOverTime", value);
                   }}
+                  visibleUntil={data.likesVisibleUntil}
+                  onVisibleUntil={(value) => set("likesVisibleUntil", value)}
                   showHandles={editing}
                   yTop={data.likesYTop}
                   yMid={data.likesYMid}
@@ -1243,16 +1255,33 @@ function useDragPoints(
   onChange: (next: number[]) => void,
   yMin: number,
   yMax: number,
+  onLongPress?: (index: number) => void,
 ) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragIndex = useRef<number | null>(null);
+  const longPressTimer = useRef<number | null>(null);
+  const longPressTriggered = useRef(false);
+  const clearLongPress = () => {
+    if (longPressTimer.current !== null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
   const onPointerDown = (index: number) => (event: React.PointerEvent) => {
     event.preventDefault();
     (event.target as Element).setPointerCapture(event.pointerId);
     dragIndex.current = index;
+    longPressTriggered.current = false;
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTriggered.current = true;
+      dragIndex.current = null;
+      onLongPress?.(index);
+    }, 5000);
   };
   const onPointerMove = (event: React.PointerEvent) => {
     if (dragIndex.current === null || !svgRef.current) return;
+    clearLongPress();
+    if (longPressTriggered.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     const viewBox = svgRef.current.viewBox.baseVal;
     const y = ((event.clientY - rect.top) / rect.height) * viewBox.height;
@@ -1265,12 +1294,13 @@ function useDragPoints(
     onPointerDown,
     onPointerMove,
     onPointerUp: () => {
+      clearLongPress();
       dragIndex.current = null;
     },
   };
 }
-function pathFromPoints(points: number[], width: number) {
-  const step = width / (points.length - 1);
+function pathFromPoints(points: number[], width: number, totalPoints = points.length) {
+  const step = width / (totalPoints - 1);
   return points
     .map(
       (y, index) =>
@@ -1283,6 +1313,10 @@ function EditableLineChart({
   typical,
   onMain,
   onTypical,
+  mainVisibleUntil,
+  typicalVisibleUntil,
+  onMainVisibleUntil,
+  onTypicalVisibleUntil,
   yTop,
   yMid,
   onYTop,
@@ -1295,6 +1329,10 @@ function EditableLineChart({
   typical: number[];
   onMain: (value: number[]) => void;
   onTypical: (value: number[]) => void;
+  mainVisibleUntil: number;
+  typicalVisibleUntil: number;
+  onMainVisibleUntil: (value: number) => void;
+  onTypicalVisibleUntil: (value: number) => void;
   yTop: string;
   yMid: string;
   onYTop: (value: string) => void;
@@ -1307,9 +1345,23 @@ function EditableLineChart({
     height = 160;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const activePoint = useRef<{ line: "main" | "typical"; index: number } | null>(null);
+  const longPressTimer = useRef<number | null>(null);
+  const longPressTriggered = useRef(false);
+  const clearLongPress = () => {
+    if (longPressTimer.current !== null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+  const visiblePoints = (points: number[], visibleUntil: number) =>
+    visibleUntil < 0 ? points : points.slice(0, visibleUntil + 1);
+  const displayedMain = visiblePoints(main, mainVisibleUntil);
+  const displayedTypical = visiblePoints(typical, typicalVisibleUntil);
   const movePoint = (event: React.PointerEvent<SVGSVGElement>) => {
     const active = activePoint.current;
     if (!active || !svgRef.current) return;
+    clearLongPress();
+    if (longPressTriggered.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     const nextY = Math.max(5, Math.min(155, ((event.clientY - rect.top) / rect.height) * height));
     const points = (active.line === "main" ? main : typical).slice();
@@ -1320,6 +1372,16 @@ function EditableLineChart({
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     activePoint.current = { line, index };
+    longPressTriggered.current = false;
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTriggered.current = true;
+      activePoint.current = null;
+      if (line === "main") {
+        onMainVisibleUntil(mainVisibleUntil === index ? -1 : index);
+      } else {
+        onTypicalVisibleUntil(typicalVisibleUntil === index ? -1 : index);
+      }
+    }, 5000);
   };
   return (
     <div className="relative mt-4 h-52 select-none">
@@ -1338,8 +1400,9 @@ function EditableLineChart({
         preserveAspectRatio="none"
         className="absolute inset-0 left-8 right-0 h-[calc(100%-1.5rem)] w-[calc(100%-2rem)] touch-none"
         onPointerMove={movePoint}
-        onPointerUp={() => { activePoint.current = null; }}
-        onPointerLeave={() => { activePoint.current = null; }}
+        onPointerUp={() => { clearLongPress(); activePoint.current = null; }}
+        onPointerLeave={() => { clearLongPress(); activePoint.current = null; }}
+        onPointerCancel={() => { clearLongPress(); activePoint.current = null; }}
       >
         <line x1="0" y1="0" x2={width} y2="0" stroke="rgba(255,255,255,0.08)" />
         <line
@@ -1357,7 +1420,7 @@ function EditableLineChart({
           stroke="rgba(255,255,255,0.08)"
         />
         <path
-          d={pathFromPoints(typical, width)}
+          d={pathFromPoints(displayedTypical, width, typical.length)}
           fill="none"
           stroke="rgba(255,255,255,0.4)"
           strokeWidth="2.5"
@@ -1366,7 +1429,7 @@ function EditableLineChart({
           strokeLinejoin="round"
         />
         {showHandles &&
-          typical.map((y, index) => (
+          displayedTypical.map((y, index) => (
             <circle
               key={index}
               cx={(index * width) / (typical.length - 1)}
@@ -1380,7 +1443,7 @@ function EditableLineChart({
             />
           ))}
         <path
-          d={pathFromPoints(main, width)}
+          d={pathFromPoints(displayedMain, width, main.length)}
           fill="none"
           stroke="#eb22d4"
           strokeWidth="3.5"
@@ -1388,7 +1451,7 @@ function EditableLineChart({
           strokeLinejoin="round"
         />
         {showHandles &&
-          main.map((y, index) => (
+          displayedMain.map((y, index) => (
             <circle
               key={index}
               cx={(index * width) / (main.length - 1)}
@@ -1418,6 +1481,8 @@ function EditableLineChart({
 function EditableSingleChart({
   data,
   onChange,
+  visibleUntil,
+  onVisibleUntil,
   showHandles = true,
   yTop,
   yMid,
@@ -1428,6 +1493,8 @@ function EditableSingleChart({
 }: {
   data: number[];
   onChange: (value: number[]) => void;
+  visibleUntil: number;
+  onVisibleUntil: (value: number) => void;
   showHandles?: boolean;
   yTop: string;
   yMid: string;
@@ -1438,7 +1505,10 @@ function EditableSingleChart({
 }) {
   const width = 320,
     height = 140;
-  const drag = useDragPoints(data, onChange, 5, 135);
+  const drag = useDragPoints(data, onChange, 5, 135, (index) => {
+    onVisibleUntil(visibleUntil === index ? -1 : index);
+  });
+  const displayedData = visibleUntil < 0 ? data : data.slice(0, visibleUntil + 1);
   return (
     <div className="relative mt-6 h-44 select-none">
       <div className="absolute left-0 top-2 text-[11px] text-white/50">
@@ -1458,6 +1528,7 @@ function EditableSingleChart({
         onPointerMove={drag.onPointerMove}
         onPointerUp={drag.onPointerUp}
         onPointerLeave={drag.onPointerUp}
+        onPointerCancel={drag.onPointerUp}
       >
         <line
           x1="0"
@@ -1481,7 +1552,7 @@ function EditableSingleChart({
           stroke="rgba(255,255,255,0.08)"
         />
         <path
-          d={pathFromPoints(data, width)}
+          d={pathFromPoints(displayedData, width, data.length)}
           fill="none"
           stroke="#eb22d4"
           strokeWidth="3.5"
@@ -1489,7 +1560,7 @@ function EditableSingleChart({
           strokeLinejoin="round"
         />
         {showHandles &&
-          data.map((y, index) => (
+          displayedData.map((y, index) => (
             <circle
               key={index}
               cx={(index * width) / (data.length - 1)}
