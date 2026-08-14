@@ -263,6 +263,9 @@ function ReelInsightsPage() {
   const [importNotice, setImportNotice] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const chartImageRef = useRef<HTMLInputElement | null>(null);
+  const [chartImage, setChartImage] = useState<string | null>(null);
+  const [showUploadOptions, setShowUploadOptions] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -324,6 +327,7 @@ function ReelInsightsPage() {
       const storedThumb = localStorage.getItem("reel-insights-thumb");
       if (storedThumb) setThumb(storedThumb);
       setHasImportedThumbnail(localStorage.getItem("reel-insights-imported-thumb") === "true");
+      setChartImage(localStorage.getItem("reel-insights-chart-image"));
     } catch {}
   }, []);
 
@@ -340,6 +344,19 @@ function ReelInsightsPage() {
       try {
         localStorage.setItem("reel-insights-thumb", image);
         localStorage.removeItem("reel-insights-imported-thumb");
+      } catch {}
+    };
+    reader.readAsDataURL(file);
+  };
+  const onPickChartImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = String(reader.result);
+      setChartImage(image);
+      try {
+        localStorage.setItem("reel-insights-chart-image", image);
       } catch {}
     };
     reader.readAsDataURL(file);
@@ -408,7 +425,7 @@ function ReelInsightsPage() {
       className="min-h-screen bg-[#0c0f14] text-zinc-100"
       style={{ fontFamily: "'Roboto', system-ui, -apple-system, sans-serif" }}
     >
-      <div className="mx-auto max-w-md pb-24">
+      <div className="mx-auto max-w-md pb-6">
         <header className="sticky top-0 z-20 flex items-center gap-3 bg-[#0c0f14]/95 px-4 pb-3 pt-4 backdrop-blur">
           <button
             aria-label="Back"
@@ -418,7 +435,10 @@ function ReelInsightsPage() {
           </button>
           <button
             onClick={handleHeaderSave}
-            onDoubleClick={() => setEditing(true)}
+            onDoubleClick={() => {
+              setEditing(true);
+              setShowUploadOptions((visible) => !visible);
+            }}
             className="flex-1 text-left"
             title="Click title to save · double-click to edit graphs"
           >
@@ -433,12 +453,31 @@ function ReelInsightsPage() {
           <button aria-label="Trends" className="p-1 text-white/75 hover:text-zinc-100">
             <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
           </button>
-          <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-white/75 hover:text-zinc-100">
-            <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
-          </button>
+          {showUploadOptions && (
+            <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-white/75 hover:text-zinc-100">
+              <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
+            </button>
+          )}
         </header>
+        {showUploadOptions && (
+          <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-xl border border-dashed border-white/20 bg-white/[0.03] px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium text-white">Chart image output</p>
+              <p className="text-xs text-white/55">Upload a finished chart or insights screenshot—no editing needed.</p>
+            </div>
+            <button type="button" onClick={() => chartImageRef.current?.click()} className="shrink-0 rounded-lg bg-[#eb22d4] px-3 py-2 text-xs font-semibold text-white">
+              {chartImage ? "Replace" : "Upload"}
+            </button>
+            <input ref={chartImageRef} type="file" accept="image/*" className="hidden" onChange={onPickChartImage} />
+          </div>
+        )}
+        {chartImage && (
+          <section className="mx-4 mt-4 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+            <img src={chartImage} alt="Uploaded chart output" className="block h-auto w-full" />
+          </section>
+        )}
         <div className="flex justify-center pt-4">
-          {hasImportedThumbnail ? (
+          {hasImportedThumbnail || !showUploadOptions ? (
             <img
               src={thumb}
               alt="Imported reel thumbnail"
@@ -540,7 +579,7 @@ function ReelInsightsPage() {
                   onChange={(value) => set("follows", value)}
                 />
               </div>
-              <div className="mt-8">
+              <div className="mt-6">
                 <SectionTitle>Views over time</SectionTitle>
                 <div className="mt-3 flex gap-2">
                   {(["All", "Followers", "Non-followers"] as const).map(
@@ -598,7 +637,7 @@ function ReelInsightsPage() {
                   </span>
                 </div>
               </div>
-              <div className="mt-8">
+              <div className="mt-6">
                 <SectionTitle>What impacts your views</SectionTitle>
                 <p className="mt-1 text-[13px] text-white/75">
                   Rates are listed in order of importance to reach.
@@ -699,7 +738,7 @@ function ReelInsightsPage() {
                   }
                 />
               </MediaChart>
-              <div className="mt-10">
+              <div className="mt-6">
                 <SectionTitle>Top sources of views</SectionTitle>
                 <div className="mt-4 space-y-4">
                   <CountryRow
@@ -739,7 +778,7 @@ function ReelInsightsPage() {
                   />
                 </div>
               </div>
-              <div className="mt-8">
+              <div className="mt-6">
                 <div className="mb-2 text-[14px] font-semibold text-white/90">
                   Ad
                 </div>
@@ -766,7 +805,7 @@ function ReelInsightsPage() {
                   onChange={(value) => set("eProfileVisits", value)}
                 />
               </div>
-              <div className="mt-8">
+              <div className="mt-6">
                 <SectionTitle>Interactions</SectionTitle>
                 <div className="mt-3 divide-y divide-white/5">
                   <SimpleRow
@@ -835,7 +874,7 @@ function ReelInsightsPage() {
                   color={IG_PURPLE}
                 />
               </div>
-              <div className="mt-8">
+              <div className="mt-6">
                 <SectionTitle>Audience details</SectionTitle>
                 <div className="mt-3 flex gap-2">
                   {(["Age", "Country", "Gender"] as AudTab[]).map((item) => (
@@ -1183,7 +1222,7 @@ function MediaChart({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mt-10">
+    <div className="mt-6">
       <SectionTitle>{title}</SectionTitle>
       <div className="mt-4 flex justify-center">
         <div className="relative h-[160px] w-[110px] overflow-hidden rounded-2xl">
