@@ -267,9 +267,6 @@ function ReelInsightsPage() {
   const [importNotice, setImportNotice] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const chartImageRef = useRef<HTMLInputElement | null>(null);
-  const [chartImage, setChartImage] = useState<string | null>(null);
-  const [showUploadOptions, setShowUploadOptions] = useState(true);
 
   useEffect(() => {
     let active = true;
@@ -331,7 +328,6 @@ function ReelInsightsPage() {
       const storedThumb = localStorage.getItem("reel-insights-thumb");
       if (storedThumb) setThumb(storedThumb);
       setHasImportedThumbnail(localStorage.getItem("reel-insights-imported-thumb") === "true");
-      setChartImage(localStorage.getItem("reel-insights-chart-image"));
     } catch {}
   }, []);
 
@@ -348,19 +344,6 @@ function ReelInsightsPage() {
       try {
         localStorage.setItem("reel-insights-thumb", image);
         localStorage.removeItem("reel-insights-imported-thumb");
-      } catch {}
-    };
-    reader.readAsDataURL(file);
-  };
-  const onPickChartImage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const image = String(reader.result);
-      setChartImage(image);
-      try {
-        localStorage.setItem("reel-insights-chart-image", image);
       } catch {}
     };
     reader.readAsDataURL(file);
@@ -439,10 +422,7 @@ function ReelInsightsPage() {
           </button>
           <button
             onClick={handleHeaderSave}
-            onDoubleClick={() => {
-              setEditing(true);
-              setShowUploadOptions((visible) => !visible);
-            }}
+            onDoubleClick={() => setEditing(true)}
             className="flex-1 text-left"
             title="Click title to save · double-click to edit graphs"
           >
@@ -457,31 +437,12 @@ function ReelInsightsPage() {
           <button aria-label="Trends" className="p-1 text-white/75 hover:text-zinc-100">
             <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
           </button>
-          {showUploadOptions && (
-            <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-white/75 hover:text-zinc-100">
-              <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
-            </button>
-          )}
+          <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-white/75 hover:text-zinc-100">
+            <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
+          </button>
         </header>
-        {showUploadOptions && (
-          <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-xl border border-dashed border-white/20 bg-white/[0.03] px-3 py-2.5">
-            <div>
-              <p className="text-sm font-medium text-white">Chart image output</p>
-              <p className="text-xs text-white/55">Upload a finished chart or insights screenshot—no editing needed.</p>
-            </div>
-            <button type="button" onClick={() => chartImageRef.current?.click()} className="shrink-0 rounded-lg bg-[#eb22d4] px-3 py-2 text-xs font-semibold text-white">
-              {chartImage ? "Replace" : "Upload"}
-            </button>
-            <input ref={chartImageRef} type="file" accept="image/*" className="hidden" onChange={onPickChartImage} />
-          </div>
-        )}
-        {chartImage && (
-          <section className="mx-4 mt-4 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
-            <img src={chartImage} alt="Uploaded chart output" className="block h-auto w-full" />
-          </section>
-        )}
         <div className="flex justify-center pt-4">
-          {hasImportedThumbnail || !showUploadOptions ? (
+          {hasImportedThumbnail ? (
             <img
               src={thumb}
               alt="Imported reel thumbnail"
@@ -1261,6 +1222,7 @@ function useDragPoints(
   const dragIndex = useRef<number | null>(null);
   const longPressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
+  const holdStart = useRef<{ x: number; y: number } | null>(null);
   const clearLongPress = () => {
     if (longPressTimer.current !== null) {
       window.clearTimeout(longPressTimer.current);
@@ -1272,6 +1234,7 @@ function useDragPoints(
     (event.target as Element).setPointerCapture(event.pointerId);
     dragIndex.current = index;
     longPressTriggered.current = false;
+    holdStart.current = { x: event.clientX, y: event.clientY };
     longPressTimer.current = window.setTimeout(() => {
       longPressTriggered.current = true;
       dragIndex.current = null;
@@ -1280,7 +1243,9 @@ function useDragPoints(
   };
   const onPointerMove = (event: React.PointerEvent) => {
     if (dragIndex.current === null || !svgRef.current) return;
-    clearLongPress();
+    const start = holdStart.current;
+    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10)
+      clearLongPress();
     if (longPressTriggered.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     const viewBox = svgRef.current.viewBox.baseVal;
@@ -1296,6 +1261,7 @@ function useDragPoints(
     onPointerUp: () => {
       clearLongPress();
       dragIndex.current = null;
+      holdStart.current = null;
     },
   };
 }
@@ -1347,6 +1313,7 @@ function EditableLineChart({
   const activePoint = useRef<{ line: "main" | "typical"; index: number } | null>(null);
   const longPressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
+  const holdStart = useRef<{ x: number; y: number } | null>(null);
   const clearLongPress = () => {
     if (longPressTimer.current !== null) {
       window.clearTimeout(longPressTimer.current);
@@ -1360,7 +1327,9 @@ function EditableLineChart({
   const movePoint = (event: React.PointerEvent<SVGSVGElement>) => {
     const active = activePoint.current;
     if (!active || !svgRef.current) return;
-    clearLongPress();
+    const start = holdStart.current;
+    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10)
+      clearLongPress();
     if (longPressTriggered.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     const nextY = Math.max(5, Math.min(155, ((event.clientY - rect.top) / rect.height) * height));
@@ -1373,6 +1342,7 @@ function EditableLineChart({
     event.currentTarget.setPointerCapture(event.pointerId);
     activePoint.current = { line, index };
     longPressTriggered.current = false;
+    holdStart.current = { x: event.clientX, y: event.clientY };
     longPressTimer.current = window.setTimeout(() => {
       longPressTriggered.current = true;
       activePoint.current = null;
@@ -1400,9 +1370,9 @@ function EditableLineChart({
         preserveAspectRatio="none"
         className="absolute inset-0 left-8 right-0 h-[calc(100%-1.5rem)] w-[calc(100%-2rem)] touch-none"
         onPointerMove={movePoint}
-        onPointerUp={() => { clearLongPress(); activePoint.current = null; }}
-        onPointerLeave={() => { clearLongPress(); activePoint.current = null; }}
-        onPointerCancel={() => { clearLongPress(); activePoint.current = null; }}
+        onPointerUp={() => { clearLongPress(); activePoint.current = null; holdStart.current = null; }}
+        onPointerLeave={() => { activePoint.current = null; }}
+        onPointerCancel={() => { clearLongPress(); activePoint.current = null; holdStart.current = null; }}
       >
         <line x1="0" y1="0" x2={width} y2="0" stroke="rgba(255,255,255,0.08)" />
         <line
