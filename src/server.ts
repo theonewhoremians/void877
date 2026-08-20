@@ -45,11 +45,32 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+async function downloadThumbnail(request: Request) {
+  try {
+    const source = new URL(new URL(request.url).searchParams.get("url") ?? "");
+    if (!/(^|\.)(cdninstagram\.com|fbcdn\.net|instagram\.com)$/i.test(source.hostname)) {
+      return new Response("Unsupported thumbnail source.", { status: 400 });
+    }
+    const response = await fetch(source, { headers: { accept: "image/*" } });
+    if (!response.ok) return new Response("Thumbnail is unavailable.", { status: 502 });
+    const headers = new Headers();
+    headers.set("content-type", response.headers.get("content-type") ?? "image/jpeg");
+    headers.set("content-disposition", 'attachment; filename="imported-reel-thumbnail.jpg"');
+    headers.set("cache-control", "private, max-age=300");
+    return new Response(response.body, { headers });
+  } catch {
+    return new Response("Invalid thumbnail URL.", { status: 400 });
+  }
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       if (new URL(request.url).pathname === "/api/import-instagram") {
         return await importInstagramReel(request);
+      }
+      if (new URL(request.url).pathname === "/api/download-thumbnail") {
+        return await downloadThumbnail(request);
       }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

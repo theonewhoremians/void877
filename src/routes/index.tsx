@@ -291,12 +291,16 @@ function ReelInsightsPage() {
   const [savedToast, setSavedToast] = useState(false);
   const [editing, setEditing] = useState(true);
   const [thumb, setThumb] = useState<string>(reelThumb);
+  const [chartThumb, setChartThumb] = useState<string>(reelThumb);
+  const [importedThumb, setImportedThumb] = useState("");
+  const [isTrendMenuOpen, setIsTrendMenuOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [reelUrl, setReelUrl] = useState("");
   const [importError, setImportError] = useState("");
   const [importNotice, setImportNotice] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const chartFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -356,7 +360,11 @@ function ReelInsightsPage() {
   useEffect(() => {
     try {
       const storedThumb = localStorage.getItem("reel-insights-thumb");
+      const storedChartThumb = localStorage.getItem("reel-insights-chart-thumb");
+      const storedImportedThumb = localStorage.getItem("reel-insights-imported-thumb-url");
       if (storedThumb) setThumb(storedThumb);
+      setChartThumb(storedChartThumb || storedThumb || reelThumb);
+      if (storedImportedThumb) setImportedThumb(storedImportedThumb);
     } catch {}
   }, []);
 
@@ -369,11 +377,42 @@ function ReelInsightsPage() {
     reader.onload = () => {
       const image = String(reader.result);
       setThumb(image);
+      setChartThumb(image);
       try {
         localStorage.setItem("reel-insights-thumb", image);
+        localStorage.setItem("reel-insights-chart-thumb", image);
       } catch {}
     };
     reader.readAsDataURL(file);
+  };
+  const onPickChartThumb = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const image = String(reader.result);
+      setChartThumb(image);
+      try { localStorage.setItem("reel-insights-chart-thumb", image); } catch {}
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+  const downloadImportedThumbnail = async () => {
+    if (!importedThumb) return;
+    try {
+      const response = await fetch(`/api/download-thumbnail?url=${encodeURIComponent(importedThumb)}`);
+      if (!response.ok) throw new Error("Download failed");
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "imported-reel-thumbnail.jpg";
+      link.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(importedThumb, "_blank", "noopener,noreferrer");
+    } finally {
+      setIsTrendMenuOpen(false);
+    }
   };
   const handleHeaderSave = () => {
     if (document.activeElement instanceof HTMLElement)
@@ -413,7 +452,6 @@ function ReelInsightsPage() {
         value === null ? {} : { [key]: count(value)! };
       const next = {
         ...data,
-        ...(imported.caption ? { title: imported.caption.split(/\r?\n/)[0].slice(0, 120) } : {}),
         ...applyCount("likes", imported.likes), ...applyCount("eLikes", imported.likes),
         ...applyCount("comments", imported.comments), ...applyCount("eComments", imported.comments),
         ...applyCount("reposts", imported.reposts), ...applyCount("eReposts", imported.reposts),
@@ -424,7 +462,11 @@ function ReelInsightsPage() {
       save(imported.views === null ? next : syncViewsYAxis(next, count(imported.views)!));
       if (imported.thumbnail) {
         setThumb(imported.thumbnail);
+        setChartThumb(imported.thumbnail);
+        setImportedThumb(imported.thumbnail);
         localStorage.setItem("reel-insights-thumb", imported.thumbnail);
+        localStorage.setItem("reel-insights-chart-thumb", imported.thumbnail);
+        localStorage.setItem("reel-insights-imported-thumb-url", imported.thumbnail);
       }
       setImportNotice("Reel details imported.");
     } catch (error) {
@@ -461,9 +503,18 @@ function ReelInsightsPage() {
               ariaLabel="Page title"
             />
           </button>
-          <button aria-label="Trends" className="p-1 text-white/75 hover:text-zinc-100">
-            <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
-          </button>
+          <div className="relative">
+            <button onClick={() => setIsTrendMenuOpen((open) => !open)} aria-label="Thumbnail options" aria-expanded={isTrendMenuOpen} className="p-1 text-white/75 hover:text-zinc-100">
+              <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
+            </button>
+            {isTrendMenuOpen && (
+              <div className="absolute right-0 top-10 z-30 w-56 rounded-xl border border-white/15 bg-zinc-950 p-1.5 shadow-2xl">
+                <button type="button" disabled={!importedThumb} onClick={downloadImportedThumbnail} className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-white/35">
+                  {importedThumb ? "Download imported thumbnail" : "Import a thumbnail first"}
+                </button>
+              </div>
+            )}
+          </div>
           <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-white/75 hover:text-zinc-100">
             <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
           </button>
@@ -491,6 +542,7 @@ function ReelInsightsPage() {
             className="hidden"
             onChange={onPickThumb}
           />
+          <input ref={chartFileRef} type="file" accept="image/*" className="hidden" onChange={onPickChartThumb} />
         </div>
         <div className="mt-5 grid grid-cols-5 gap-2 px-6">
           <StatIcon
@@ -707,7 +759,8 @@ function ReelInsightsPage() {
               </div>
               <MediaChart
                 title="How long people watched your reel"
-                thumb={thumb}
+                thumb={chartThumb}
+                onChangeThumb={() => chartFileRef.current?.click()}
               >
                 <EditableSingleChart
                   data={data.watch}
@@ -825,7 +878,7 @@ function ReelInsightsPage() {
                   />
                 </div>
               </div>
-              <MediaChart title="When people liked your reel" thumb={thumb}>
+              <MediaChart title="When people liked your reel" thumb={chartThumb} onChangeThumb={() => chartFileRef.current?.click()}>
                 <EditableSingleChart
                   data={data.likesOverTime}
                   onChange={(value) => {
@@ -1207,24 +1260,27 @@ function CountryRow({
 function MediaChart({
   title,
   thumb,
+  onChangeThumb,
   children,
 }: {
   title: string;
   thumb: string;
+  onChangeThumb: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className="mt-6">
       <SectionTitle>{title}</SectionTitle>
       <div className="mt-4 flex justify-center">
-        <div className="relative h-[160px] w-[110px] overflow-hidden rounded-2xl">
+        <button type="button" onClick={onChangeThumb} aria-label={`Change thumbnail for ${title}`} className="group relative h-[160px] w-[110px] overflow-hidden rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]">
           <img
             src={thumb}
-            alt=""
+            alt={`${title} thumbnail`}
             className="h-full w-full object-cover"
             loading="lazy"
           />
-        </div>
+          <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100">Change photo</span>
+        </button>
       </div>
       {children}
     </div>
