@@ -231,11 +231,6 @@ function useLocalData() {
     } catch {}
   }, []);
 
-  useEffect(() => {
-    if (!importNotice) return;
-    const timeout = window.setTimeout(() => setImportNotice(""), 2_000);
-    return () => window.clearTimeout(timeout);
-  }, [importNotice]);
   const save = (next: DataShape) => {
     setData(next);
     try {
@@ -373,6 +368,12 @@ function ReelInsightsPage() {
   const [thumbnailImportMode, setThumbnailImportMode] = useState<"cleaned" | "original">("cleaned");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const chartFileRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!importNotice) return;
+    const timeout = window.setTimeout(() => setImportNotice(""), 2_000);
+    return () => window.clearTimeout(timeout);
+  }, [importNotice]);
 
   useEffect(() => {
     let active = true;
