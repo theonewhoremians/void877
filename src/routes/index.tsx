@@ -157,6 +157,10 @@ function syncViewsYAxis(data: DataShape, views: string): DataShape {
   };
 }
 
+function randomUnitedStatesAudience() {
+  return `${(40.1 + Math.random() * 14.9).toFixed(1)}%`;
+}
+
 function useLocalData() {
   const [data, setData] = useState<DataShape>(defaultData);
   useEffect(() => {
@@ -452,6 +456,7 @@ function ReelInsightsPage() {
         value === null ? {} : { [key]: count(value)! };
       const next = {
         ...data,
+        c1Val: randomUnitedStatesAudience(),
         ...applyCount("likes", imported.likes), ...applyCount("eLikes", imported.likes),
         ...applyCount("comments", imported.comments), ...applyCount("eComments", imported.comments),
         ...applyCount("reposts", imported.reposts), ...applyCount("eReposts", imported.reposts),
@@ -920,7 +925,7 @@ function ReelInsightsPage() {
                 />
               </div>
               <div className="mt-6">
-                <SectionTitle>Audience details</SectionTitle>
+                <SectionTitle onDoubleClick={() => set("c1Val", randomUnitedStatesAudience())}>Audience details</SectionTitle>
                 <div className="mt-3 flex gap-2">
                   {(["Age", "Country", "Gender"] as AudTab[]).map((item) => (
                     <button
@@ -1065,7 +1070,7 @@ function ReelInsightsPage() {
               placeholder="https://www.instagram.com/reel/..."
               className="mt-2 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/50 focus:border-[#eb22d4]"
             />
-            <p className="mt-3 text-xs leading-5 text-white">This imports the thumbnail, creator, and caption/title, plus visible likes and comments whenever Instagram makes them available. Shares, reposts, saves, duration, and insights are private.</p>
+            <p className="mt-3 text-xs leading-5 text-white">This imports the thumbnail and public engagement data whenever Instagram makes them available. The title stays unchanged; private insights remain manually editable.</p>
             {importError && <p className="mt-3 text-sm text-red-300">{importError}</p>}
             {importNotice && <p className="mt-3 text-sm text-emerald-300">{importNotice}</p>}
             <div className="mt-5 flex justify-end gap-3">
@@ -1082,9 +1087,9 @@ function ReelInsightsPage() {
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function SectionTitle({ children, onDoubleClick }: { children: React.ReactNode; onDoubleClick?: () => void }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className={"flex items-center gap-1.5 " + (onDoubleClick ? "cursor-pointer select-none" : "")} onDoubleClick={onDoubleClick} title={onDoubleClick ? "Double-click to refresh" : undefined}>
       <h2 className="text-[17px] font-semibold">{children}</h2>
       <Info className="h-4 w-4 text-white/60" />
     </div>
