@@ -166,7 +166,58 @@ function randomUnitedStatesAudience() {
   return `${(40.1 + Math.random() * 14.9).toFixed(1)}%`;
 }
 
-async function cleanedThumbnail(source: string) {
+async function frameFromVideo(source: string) {
+  const response = await fetch(`/api/download-thumbnail?url=${encodeURIComponent(source)}`);
+  if (!response.ok) throw new Error("Could not load the reel video.");
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = objectUrl;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error("Video frame timed out.")), 12_000);
+      video.onloadedmetadata = () => {
+        const captureAt = Number.isFinite(video.duration)
+          ? Math.min(Math.max(video.duration * 0.04, 0.08), Math.max(0.08, video.duration - 0.05))
+          : 0.08;
+        video.currentTime = captureAt;
+      };
+      video.onseeked = () => {
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      video.onerror = () => {
+        window.clearTimeout(timeout);
+        reject(new Error("The public video could not be decoded."));
+      };
+    });
+    if (!video.videoWidth || !video.videoHeight) throw new Error("The video has no usable frame.");
+    const scale = Math.min(1, 1080 / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Video frame capture is unavailable.");
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.92);
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function cleanedThumbnail(source: string, videoSource?: string | null) {
+  if (videoSource) {
+    try {
+      return await frameFromVideo(videoSource);
+    } catch {
+      // Some public reels expose a thumbnail but protect the video URL. Fall
+      // back to local overlay cleanup without interrupting the import.
+    }
+  }
   const response = await fetch(`/api/download-thumbnail?url=${encodeURIComponent(source)}`);
   if (!response.ok) throw new Error("Could not load the thumbnail for cleanup.");
   const bitmap = await createImageBitmap(await response.blob());
@@ -539,7 +590,7 @@ function ReelInsightsPage() {
         let selectedThumbnail = imported.thumbnail;
         if (thumbnailImportMode === "cleaned") {
           try {
-            selectedThumbnail = await cleanedThumbnail(imported.thumbnail);
+            selectedThumbnail = await cleanedThumbnail(imported.thumbnail, imported.videoUrl);
           } catch {
             setImportNotice("Reel details imported, but thumbnail cleanup was unavailable, so the original was used.");
           }
