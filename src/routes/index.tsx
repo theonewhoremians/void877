@@ -146,12 +146,17 @@ function compactAxisCount(value: number) {
 }
 
 function syncViewsYAxis(data: DataShape, views: string): DataShape {
-  if (!data.chartYAxisAuto) return { ...data, views };
   const count = numericCount(views);
   if (count === null) return { ...data, views };
+  const reduction = 0.1 + Math.random() * 0.05;
+  const reached = new Intl.NumberFormat("en-US").format(
+    Math.round(count * (1 - reduction)),
+  );
+  if (!data.chartYAxisAuto) return { ...data, views, reached };
   return {
     ...data,
     views,
+    reached,
     chartMax: compactAxisCount(count),
     chartMid: compactAxisCount(Math.round(count / 2)),
   };
