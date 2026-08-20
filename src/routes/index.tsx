@@ -398,6 +398,7 @@ function ReelInsightsPage() {
   const [thumbnailImportMode, setThumbnailImportMode] = useState<"cleaned" | "original">("cleaned");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const chartFileRef = useRef<HTMLInputElement | null>(null);
+  const importSequenceRef = useRef(0);
 
   useEffect(() => {
     if (!importNotice) return;
@@ -541,6 +542,7 @@ function ReelInsightsPage() {
   };
   const handleImport = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const importSequence = ++importSequenceRef.current;
     setImportError("");
     setImportNotice("");
     try {
@@ -566,22 +568,32 @@ function ReelInsightsPage() {
       };
       save(imported.views === null ? next : syncViewsYAxis(next, count(imported.views)!));
       if (imported.thumbnail) {
-        let selectedThumbnail = imported.thumbnail;
+        const applyImportedThumbnail = (selectedThumbnail: string) => {
+          if (importSequenceRef.current !== importSequence) return;
+          setThumb(selectedThumbnail);
+          setChartThumb(selectedThumbnail);
+          setImportedThumb(selectedThumbnail);
+          localStorage.setItem("reel-insights-thumb", selectedThumbnail);
+          localStorage.setItem("reel-insights-chart-thumb", selectedThumbnail);
+          localStorage.setItem("reel-insights-imported-thumb-url", selectedThumbnail);
+        };
+        // Complete the import immediately. AI cleanup is intentionally
+        // background work because its first run downloads the local model.
+        applyImportedThumbnail(imported.thumbnail);
         if (thumbnailImportMode === "cleaned") {
-          try {
-            selectedThumbnail = await cleanedThumbnail(imported.thumbnail);
-          } catch {
-            setImportNotice("Reel details imported, but thumbnail cleanup was unavailable, so the original was used.");
-          }
+          void cleanedThumbnail(imported.thumbnail)
+            .then((cleaned) => {
+              applyImportedThumbnail(cleaned);
+              if (importSequenceRef.current === importSequence)
+                setImportNotice("Cleaned thumbnail applied.");
+            })
+            .catch(() => {
+              if (importSequenceRef.current === importSequence)
+                setImportNotice("Reel imported; the original thumbnail was kept because cleanup was unavailable.");
+            });
         }
-        setThumb(selectedThumbnail);
-        setChartThumb(selectedThumbnail);
-        setImportedThumb(selectedThumbnail);
-        localStorage.setItem("reel-insights-thumb", selectedThumbnail);
-        localStorage.setItem("reel-insights-chart-thumb", selectedThumbnail);
-        localStorage.setItem("reel-insights-imported-thumb-url", selectedThumbnail);
       }
-      setImportNotice((notice) => notice || `Reel details imported with the ${thumbnailImportMode} thumbnail.`);
+      setImportNotice(thumbnailImportMode === "cleaned" ? "Reel details imported. Thumbnail cleanup is continuing." : "Reel details imported with the original thumbnail.");
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Could not import that reel.");
     } finally {
