@@ -166,58 +166,22 @@ function randomUnitedStatesAudience() {
   return `${(40.1 + Math.random() * 14.9).toFixed(1)}%`;
 }
 
-async function frameFromVideo(source: string) {
-  const response = await fetch(`/api/download-thumbnail?url=${encodeURIComponent(source)}`);
-  if (!response.ok) throw new Error("Could not load the reel video.");
-  const objectUrl = URL.createObjectURL(await response.blob());
-  const video = document.createElement("video");
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = "auto";
-  video.src = objectUrl;
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const timeout = window.setTimeout(() => reject(new Error("Video frame timed out.")), 12_000);
-      video.onloadedmetadata = () => {
-        const captureAt = Number.isFinite(video.duration)
-          ? Math.min(Math.max(video.duration * 0.04, 0.08), Math.max(0.08, video.duration - 0.05))
-          : 0.08;
-        video.currentTime = captureAt;
-      };
-      video.onseeked = () => {
-        window.clearTimeout(timeout);
-        resolve();
-      };
-      video.onerror = () => {
-        window.clearTimeout(timeout);
-        reject(new Error("The public video could not be decoded."));
-      };
+let lamaSessionPromise: Promise<import("onnxruntime-web").InferenceSession> | null = null;
+
+async function getLamaSession() {
+  if (!lamaSessionPromise) {
+    lamaSessionPromise = import("onnxruntime-web").then(async (ort) => {
+      ort.env.wasm.numThreads = 1;
+      return ort.InferenceSession.create("/models/lama_512_int8.onnx", {
+        executionProviders: ["wasm"],
+        graphOptimizationLevel: "all",
+      });
     });
-    if (!video.videoWidth || !video.videoHeight) throw new Error("The video has no usable frame.");
-    const scale = Math.min(1, 1080 / Math.max(video.videoWidth, video.videoHeight));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Video frame capture is unavailable.");
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.92);
-  } finally {
-    video.removeAttribute("src");
-    video.load();
-    URL.revokeObjectURL(objectUrl);
   }
+  return lamaSessionPromise;
 }
 
-async function cleanedThumbnail(source: string, videoSource?: string | null) {
-  if (videoSource) {
-    try {
-      return await frameFromVideo(videoSource);
-    } catch {
-      // Some public reels expose a thumbnail but protect the video URL. Fall
-      // back to local overlay cleanup without interrupting the import.
-    }
-  }
+async function cleanedThumbnail(source: string) {
   const response = await fetch(`/api/download-thumbnail?url=${encodeURIComponent(source)}`);
   if (!response.ok) throw new Error("Could not load the thumbnail for cleanup.");
   const bitmap = await createImageBitmap(await response.blob());
@@ -235,41 +199,56 @@ async function cleanedThumbnail(source: string, videoSource?: string | null) {
   context.drawImage(bitmap, edgeCrop, edgeCrop, sourceWidth, sourceHeight, 0, 0, width, height);
   bitmap.close();
 
-  // Public preview images place the play badge in the center. Reconstruct its
-  // circular footprint from pixels immediately outside it, entirely on-device.
-  const pixels = context.getImageData(0, 0, width, height);
-  const original = new Uint8ClampedArray(pixels.data);
-  const centerX = (width - 1) / 2;
-  const centerY = (height - 1) / 2;
-  const radius = Math.max(10, Math.min(width, height) * 0.13);
-  const sample = (x: number, y: number, channel: number) => {
-    const safeX = Math.max(0, Math.min(width - 1, Math.round(x)));
-    const safeY = Math.max(0, Math.min(height - 1, Math.round(y)));
-    return original[(safeY * width + safeX) * 4 + channel];
-  };
-  for (let y = Math.max(0, Math.floor(centerY - radius)); y <= Math.min(height - 1, Math.ceil(centerY + radius)); y++) {
-    for (let x = Math.max(0, Math.floor(centerX - radius)); x <= Math.min(width - 1, Math.ceil(centerX + radius)); x++) {
-      const dx = x - centerX;
-      const dy = y - centerY;
-      if (dx * dx + dy * dy > radius * radius) continue;
-      const horizontal = Math.sqrt(Math.max(0, radius * radius - dy * dy));
-      const vertical = Math.sqrt(Math.max(0, radius * radius - dx * dx));
-      const left = centerX - horizontal - 2;
-      const right = centerX + horizontal + 2;
-      const top = centerY - vertical - 2;
-      const bottom = centerY + vertical + 2;
-      const horizontalMix = (x - left) / Math.max(1, right - left);
-      const verticalMix = (y - top) / Math.max(1, bottom - top);
-      const index = (y * width + x) * 4;
-      for (let channel = 0; channel < 3; channel++) {
-        const h = sample(left, y, channel) * (1 - horizontalMix) + sample(right, y, channel) * horizontalMix;
-        const v = sample(x, top, channel) * (1 - verticalMix) + sample(x, bottom, channel) * verticalMix;
-        pixels.data[index + channel] = Math.round((h + v) / 2);
-      }
-      pixels.data[index + 3] = 255;
+  const modelSize = 512;
+  const modelCanvas = document.createElement("canvas");
+  modelCanvas.width = modelSize;
+  modelCanvas.height = modelSize;
+  const modelContext = modelCanvas.getContext("2d", { willReadFrequently: true });
+  if (!modelContext) throw new Error("AI thumbnail editing is unavailable.");
+  modelContext.drawImage(canvas, 0, 0, modelSize, modelSize);
+  const modelPixels = modelContext.getImageData(0, 0, modelSize, modelSize).data;
+  const plane = modelSize * modelSize;
+  const input = new Float32Array(plane * 4);
+  const center = (modelSize - 1) / 2;
+  const maskRadius = modelSize * 0.155;
+  for (let y = 0; y < modelSize; y++) {
+    for (let x = 0; x < modelSize; x++) {
+      const pixel = y * modelSize + x;
+      const masked = (x - center) ** 2 + (y - center) ** 2 <= maskRadius ** 2;
+      input[pixel] = masked ? 0 : modelPixels[pixel * 4] / 255;
+      input[plane + pixel] = masked ? 0 : modelPixels[pixel * 4 + 1] / 255;
+      input[plane * 2 + pixel] = masked ? 0 : modelPixels[pixel * 4 + 2] / 255;
+      input[plane * 3 + pixel] = masked ? 1 : 0;
     }
   }
-  context.putImageData(pixels, 0, 0);
+
+  const ort = await import("onnxruntime-web");
+  const session = await getLamaSession();
+  const results = await session.run({ input: new ort.Tensor("float32", input, [1, 4, modelSize, modelSize]) });
+  const output = results.output.data as Float32Array;
+  const outputPixels = modelContext.createImageData(modelSize, modelSize);
+  for (let pixel = 0; pixel < plane; pixel++) {
+    outputPixels.data[pixel * 4] = Math.max(0, Math.min(255, Math.round(output[pixel] * 255)));
+    outputPixels.data[pixel * 4 + 1] = Math.max(0, Math.min(255, Math.round(output[plane + pixel] * 255)));
+    outputPixels.data[pixel * 4 + 2] = Math.max(0, Math.min(255, Math.round(output[plane * 2 + pixel] * 255)));
+    outputPixels.data[pixel * 4 + 3] = 255;
+  }
+  modelContext.putImageData(outputPixels, 0, 0);
+
+  const patch = document.createElement("canvas");
+  patch.width = width;
+  patch.height = height;
+  const patchContext = patch.getContext("2d");
+  if (!patchContext) throw new Error("AI result compositing is unavailable.");
+  patchContext.drawImage(modelCanvas, 0, 0, width, height);
+  patchContext.globalCompositeOperation = "destination-in";
+  const resultRadius = Math.min(width, height) * 0.155;
+  const gradient = patchContext.createRadialGradient(width / 2, height / 2, resultRadius * 0.82, width / 2, height / 2, resultRadius);
+  gradient.addColorStop(0, "rgba(0,0,0,1)");
+  gradient.addColorStop(1, "rgba(0,0,0,0)");
+  patchContext.fillStyle = gradient;
+  patchContext.fillRect(0, 0, width, height);
+  context.drawImage(patch, 0, 0);
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 
@@ -590,7 +569,7 @@ function ReelInsightsPage() {
         let selectedThumbnail = imported.thumbnail;
         if (thumbnailImportMode === "cleaned") {
           try {
-            selectedThumbnail = await cleanedThumbnail(imported.thumbnail, imported.videoUrl);
+            selectedThumbnail = await cleanedThumbnail(imported.thumbnail);
           } catch {
             setImportNotice("Reel details imported, but thumbnail cleanup was unavailable, so the original was used.");
           }

@@ -51,13 +51,11 @@ async function downloadThumbnail(request: Request) {
     if (!/(^|\.)(cdninstagram\.com|fbcdn\.net|instagram\.com)$/i.test(source.hostname)) {
       return new Response("Unsupported thumbnail source.", { status: 400 });
     }
-    const response = await fetch(source, { headers: { accept: "image/*,video/*;q=0.9,*/*;q=0.5" } });
-    if (!response.ok) return new Response("Imported media is unavailable.", { status: 502 });
+    const response = await fetch(source, { headers: { accept: "image/*" } });
+    if (!response.ok) return new Response("Thumbnail is unavailable.", { status: 502 });
     const headers = new Headers();
     headers.set("content-type", response.headers.get("content-type") ?? "image/jpeg");
-    headers.set("content-disposition", response.headers.get("content-type")?.startsWith("video/")
-      ? 'inline; filename="imported-reel-video.mp4"'
-      : 'attachment; filename="imported-reel-thumbnail.jpg"');
+    headers.set("content-disposition", 'attachment; filename="imported-reel-thumbnail.jpg"');
     headers.set("cache-control", "private, max-age=300");
     return new Response(response.body, { headers });
   } catch {
