@@ -57,6 +57,7 @@ const defaultData = {
   follows: "18",
   chartMax: "74K",
   chartMid: "37K",
+  chartYAxisAuto: true,
   skipRate: "12.7%",
   shareRate: "0.3%",
   likeRate: "1.0%",
@@ -125,6 +126,36 @@ type DataShape = typeof defaultData;
 type Tab = "Overview" | "Engagement" | "Audience";
 type AudTab = "Age" | "Country" | "Gender";
 type AccessState = "checking" | "allowed" | "activation-required";
+
+function numericCount(value: string) {
+  const normalized = value.trim().replace(/,/g, "");
+  const match = normalized.match(/^([\d.]+)\s*([kmb])?$/i);
+  if (!match) return null;
+  const multiplier = { k: 1_000, m: 1_000_000, b: 1_000_000_000 }[
+    (match[2]?.toLowerCase() ?? "") as "k" | "m" | "b"
+  ] ?? 1;
+  const count = Number(match[1]) * multiplier;
+  return Number.isFinite(count) ? Math.round(count) : null;
+}
+
+function compactAxisCount(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: value >= 100_000 ? 0 : 1,
+  }).format(value);
+}
+
+function syncViewsYAxis(data: DataShape, views: string): DataShape {
+  if (!data.chartYAxisAuto) return { ...data, views };
+  const count = numericCount(views);
+  if (count === null) return { ...data, views };
+  return {
+    ...data,
+    views,
+    chartMax: compactAxisCount(count),
+    chartMid: compactAxisCount(Math.round(count / 2)),
+  };
+}
 
 function useLocalData() {
   const [data, setData] = useState<DataShape>(defaultData);
@@ -260,7 +291,6 @@ function ReelInsightsPage() {
   const [savedToast, setSavedToast] = useState(false);
   const [editing, setEditing] = useState(true);
   const [thumb, setThumb] = useState<string>(reelThumb);
-  const [hasImportedThumbnail, setHasImportedThumbnail] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [reelUrl, setReelUrl] = useState("");
   const [importError, setImportError] = useState("");
@@ -327,7 +357,6 @@ function ReelInsightsPage() {
     try {
       const storedThumb = localStorage.getItem("reel-insights-thumb");
       if (storedThumb) setThumb(storedThumb);
-      setHasImportedThumbnail(localStorage.getItem("reel-insights-imported-thumb") === "true");
     } catch {}
   }, []);
 
@@ -340,10 +369,8 @@ function ReelInsightsPage() {
     reader.onload = () => {
       const image = String(reader.result);
       setThumb(image);
-      setHasImportedThumbnail(false);
       try {
         localStorage.setItem("reel-insights-thumb", image);
-        localStorage.removeItem("reel-insights-imported-thumb");
       } catch {}
     };
     reader.readAsDataURL(file);
@@ -386,18 +413,18 @@ function ReelInsightsPage() {
         value === null ? {} : { [key]: count(value)! };
       const next = {
         ...data,
+        ...(imported.caption ? { title: imported.caption.split(/\r?\n/)[0].slice(0, 120) } : {}),
         ...applyCount("likes", imported.likes), ...applyCount("eLikes", imported.likes),
         ...applyCount("comments", imported.comments), ...applyCount("eComments", imported.comments),
         ...applyCount("reposts", imported.reposts), ...applyCount("eReposts", imported.reposts),
-        ...applyCount("views", imported.views), ...applyCount("reached", imported.reached),
+        ...applyCount("shares", imported.shares), ...applyCount("eShares", imported.shares),
+        ...applyCount("saves", imported.saves), ...applyCount("eSaves", imported.saves),
         ...(duration(imported.duration) ? { watchX1: duration(imported.duration)!, likesX1: duration(imported.duration)! } : {}),
       };
-      save(next);
+      save(imported.views === null ? next : syncViewsYAxis(next, count(imported.views)!));
       if (imported.thumbnail) {
         setThumb(imported.thumbnail);
-        setHasImportedThumbnail(true);
         localStorage.setItem("reel-insights-thumb", imported.thumbnail);
-        localStorage.setItem("reel-insights-imported-thumb", "true");
       }
       setImportNotice("Reel details imported.");
     } catch (error) {
@@ -442,14 +469,7 @@ function ReelInsightsPage() {
           </button>
         </header>
         <div className="flex justify-center pt-4">
-          {hasImportedThumbnail ? (
-            <img
-              src={thumb}
-              alt="Imported reel thumbnail"
-              className="h-[190px] w-[130px] object-cover"
-            />
-          ) : (
-            <button
+          <button
               type="button"
               onClick={() => fileRef.current?.click()}
               className="group relative h-[190px] w-[130px] overflow-hidden rounded-2xl shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]"
@@ -463,8 +483,7 @@ function ReelInsightsPage() {
               <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100">
                 Change photo
               </span>
-            </button>
-          )}
+          </button>
           <input
             ref={fileRef}
             type="file"
@@ -525,7 +544,7 @@ function ReelInsightsPage() {
                 <SummaryCard
                   label="Views"
                   value={data.views}
-                  onChange={(value) => set("views", value)}
+                  onChange={(value) => save(syncViewsYAxis(data, value))}
                 />
                 <SummaryCard
                   label={data.accountsReachedLabel}
@@ -582,8 +601,8 @@ function ReelInsightsPage() {
                   showHandles={editing}
                   yTop={data.chartMax}
                   yMid={data.chartMid}
-                  onYTop={(value) => set("chartMax", value)}
-                  onYMid={(value) => set("chartMid", value)}
+                  onYTop={(value) => save({ ...data, chartMax: value, chartYAxisAuto: false })}
+                  onYMid={(value) => save({ ...data, chartMid: value, chartYAxisAuto: false })}
                   xLabelsData={[data.viewsX0, data.viewsX1, data.viewsX2]}
                   onXLabel={(index, value) =>
                     set(
