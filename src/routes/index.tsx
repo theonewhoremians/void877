@@ -166,6 +166,62 @@ function randomUnitedStatesAudience() {
   return `${(40.1 + Math.random() * 14.9).toFixed(1)}%`;
 }
 
+async function cleanedThumbnail(source: string) {
+  const response = await fetch(`/api/download-thumbnail?url=${encodeURIComponent(source)}`);
+  if (!response.ok) throw new Error("Could not load the thumbnail for cleanup.");
+  const bitmap = await createImageBitmap(await response.blob());
+  const edgeCrop = Math.round(Math.min(bitmap.width, bitmap.height) * 0.035);
+  const sourceWidth = bitmap.width - edgeCrop * 2;
+  const sourceHeight = bitmap.height - edgeCrop * 2;
+  const scale = Math.min(1, 1080 / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Thumbnail editing is unavailable in this browser.");
+  context.drawImage(bitmap, edgeCrop, edgeCrop, sourceWidth, sourceHeight, 0, 0, width, height);
+  bitmap.close();
+
+  // Public preview images place the play badge in the center. Reconstruct its
+  // circular footprint from pixels immediately outside it, entirely on-device.
+  const pixels = context.getImageData(0, 0, width, height);
+  const original = new Uint8ClampedArray(pixels.data);
+  const centerX = (width - 1) / 2;
+  const centerY = (height - 1) / 2;
+  const radius = Math.max(10, Math.min(width, height) * 0.13);
+  const sample = (x: number, y: number, channel: number) => {
+    const safeX = Math.max(0, Math.min(width - 1, Math.round(x)));
+    const safeY = Math.max(0, Math.min(height - 1, Math.round(y)));
+    return original[(safeY * width + safeX) * 4 + channel];
+  };
+  for (let y = Math.max(0, Math.floor(centerY - radius)); y <= Math.min(height - 1, Math.ceil(centerY + radius)); y++) {
+    for (let x = Math.max(0, Math.floor(centerX - radius)); x <= Math.min(width - 1, Math.ceil(centerX + radius)); x++) {
+      const dx = x - centerX;
+      const dy = y - centerY;
+      if (dx * dx + dy * dy > radius * radius) continue;
+      const horizontal = Math.sqrt(Math.max(0, radius * radius - dy * dy));
+      const vertical = Math.sqrt(Math.max(0, radius * radius - dx * dx));
+      const left = centerX - horizontal - 2;
+      const right = centerX + horizontal + 2;
+      const top = centerY - vertical - 2;
+      const bottom = centerY + vertical + 2;
+      const horizontalMix = (x - left) / Math.max(1, right - left);
+      const verticalMix = (y - top) / Math.max(1, bottom - top);
+      const index = (y * width + x) * 4;
+      for (let channel = 0; channel < 3; channel++) {
+        const h = sample(left, y, channel) * (1 - horizontalMix) + sample(right, y, channel) * horizontalMix;
+        const v = sample(x, top, channel) * (1 - verticalMix) + sample(x, bottom, channel) * verticalMix;
+        pixels.data[index + channel] = Math.round((h + v) / 2);
+      }
+      pixels.data[index + 3] = 255;
+    }
+  }
+  context.putImageData(pixels, 0, 0);
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
+
 function useLocalData() {
   const [data, setData] = useState<DataShape>(defaultData);
   useEffect(() => {
@@ -174,6 +230,12 @@ function useLocalData() {
       if (raw) setData({ ...defaultData, ...JSON.parse(raw) });
     } catch {}
   }, []);
+
+  useEffect(() => {
+    if (!importNotice) return;
+    const timeout = window.setTimeout(() => setImportNotice(""), 2_000);
+    return () => window.clearTimeout(timeout);
+  }, [importNotice]);
   const save = (next: DataShape) => {
     setData(next);
     try {
@@ -308,6 +370,7 @@ function ReelInsightsPage() {
   const [importError, setImportError] = useState("");
   const [importNotice, setImportNotice] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [thumbnailImportMode, setThumbnailImportMode] = useState<"cleaned" | "original">("cleaned");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const chartFileRef = useRef<HTMLInputElement | null>(null);
 
@@ -409,7 +472,7 @@ function ReelInsightsPage() {
   const downloadImportedThumbnail = async () => {
     if (!importedThumb) return;
     try {
-      const response = await fetch(`/api/download-thumbnail?url=${encodeURIComponent(importedThumb)}`);
+      const response = await fetch(importedThumb.startsWith("data:") ? importedThumb : `/api/download-thumbnail?url=${encodeURIComponent(importedThumb)}`);
       if (!response.ok) throw new Error("Download failed");
       const objectUrl = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
@@ -453,6 +516,7 @@ function ReelInsightsPage() {
       setIsImporting(true);
       const result = await importPublicInstagramReel(reelUrl);
       const imported = result.reel;
+      setEditing(true);
       const count = (value: number | null) =>
         value === null ? undefined : new Intl.NumberFormat("en-US").format(value);
       const duration = (seconds: number | null) =>
@@ -471,14 +535,22 @@ function ReelInsightsPage() {
       };
       save(imported.views === null ? next : syncViewsYAxis(next, count(imported.views)!));
       if (imported.thumbnail) {
-        setThumb(imported.thumbnail);
-        setChartThumb(imported.thumbnail);
-        setImportedThumb(imported.thumbnail);
-        localStorage.setItem("reel-insights-thumb", imported.thumbnail);
-        localStorage.setItem("reel-insights-chart-thumb", imported.thumbnail);
-        localStorage.setItem("reel-insights-imported-thumb-url", imported.thumbnail);
+        let selectedThumbnail = imported.thumbnail;
+        if (thumbnailImportMode === "cleaned") {
+          try {
+            selectedThumbnail = await cleanedThumbnail(imported.thumbnail);
+          } catch {
+            setImportNotice("Reel details imported, but thumbnail cleanup was unavailable, so the original was used.");
+          }
+        }
+        setThumb(selectedThumbnail);
+        setChartThumb(selectedThumbnail);
+        setImportedThumb(selectedThumbnail);
+        localStorage.setItem("reel-insights-thumb", selectedThumbnail);
+        localStorage.setItem("reel-insights-chart-thumb", selectedThumbnail);
+        localStorage.setItem("reel-insights-imported-thumb-url", selectedThumbnail);
       }
-      setImportNotice("Reel details imported.");
+      setImportNotice((notice) => notice || `Reel details imported with the ${thumbnailImportMode} thumbnail.`);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Could not import that reel.");
     } finally {
@@ -1075,6 +1147,19 @@ function ReelInsightsPage() {
               placeholder="https://www.instagram.com/reel/..."
               className="mt-2 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/50 focus:border-[#eb22d4]"
             />
+            <fieldset className="mt-4">
+              <legend className="text-sm font-medium text-white">Thumbnail version</legend>
+              <div className="mt-2 grid gap-2">
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-white/15 p-3 text-sm text-white has-[:checked]:border-[#eb22d4] has-[:checked]:bg-[#eb22d4]/10">
+                  <input type="radio" name="thumbnail-version" value="cleaned" checked={thumbnailImportMode === "cleaned"} onChange={() => setThumbnailImportMode("cleaned")} className="mt-0.5 accent-[#eb22d4]" />
+                  <span><span className="block font-medium">Cleaned thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Crop the wrapper and locally remove the centered play button.</span></span>
+                </label>
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-white/15 p-3 text-sm text-white has-[:checked]:border-[#eb22d4] has-[:checked]:bg-[#eb22d4]/10">
+                  <input type="radio" name="thumbnail-version" value="original" checked={thumbnailImportMode === "original"} onChange={() => setThumbnailImportMode("original")} className="mt-0.5 accent-[#eb22d4]" />
+                  <span><span className="block font-medium">Original thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Keep the public image exactly as imported, including its play button.</span></span>
+                </label>
+              </div>
+            </fieldset>
             <p className="mt-3 text-xs leading-5 text-white">This imports the thumbnail and public engagement data whenever Instagram makes them available. The title stays unchanged; private insights remain manually editable.</p>
             {importError && <p className="mt-3 text-sm text-red-300">{importError}</p>}
             {importNotice && <p className="mt-3 text-sm text-emerald-300">{importNotice}</p>}
