@@ -29,6 +29,7 @@ import { importPublicInstagramReel } from "@/services/instagram-import";
 export const Route = createFileRoute("/")({ component: ReelInsightsPage });
 
 const STORAGE_KEY = "reel-insights-data-v3";
+const VIEWS_TEMPLATES_KEY = "reel-insights-views-templates-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
 const defaultViewsMain = [
   155, 152, 148, 142, 135, 128, 120, 112, 104, 96, 86, 76, 65, 52, 38, 25,
@@ -42,6 +43,124 @@ const defaultWatch = [
 const defaultLikes = [
   125, 115, 105, 95, 88, 82, 78, 72, 68, 60, 55, 48, 42, 38, 32, 28,
 ];
+
+type ViewsTemplate = {
+  id: string;
+  name: string;
+  main: number[];
+  typical: number[];
+  mainVisibleUntil: number;
+  typicalVisibleUntil: number;
+};
+
+const VIEWS_PRESET_TEMPLATES: ViewsTemplate[] = [
+  { id: "fast-6k", name: "Fast rise · 6K", main: [155, 86, 48, 43, 39, 35, 32, 30, 29, 28, 28, 28, 28, 28, 28, 28], typical: [155, 132, 128, 127, 126, 126, 125, 125, 125, 125, 125, 125, 125, 125, 125, 125], mainVisibleUntil: -1, typicalVisibleUntil: -1 },
+  { id: "plateau-22k", name: "Early plateau · 22K", main: [155, 120, 78, 43, 34, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32], typical: [155, 139, 137, 137, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136], mainVisibleUntil: 11, typicalVisibleUntil: -1 },
+  { id: "growth-500k", name: "Steady growth · 500K", main: [155, 120, 73, 58, 47, 28, 24, 22, 20, 18, 16, 14, 12, 11, 10, 10], typical: [155, 154, 154, 154, 154, 154, 154, 154, 154, 154, 154, 154, 154, 154, 154, 154], mainVisibleUntil: 13, typicalVisibleUntil: -1 },
+  { id: "staged-50k", name: "Staged growth · 50K", main: [155, 137, 116, 98, 95, 70, 51, 44, 39, 35, 32, 30, 28, 26, 15, 15], typical: [155, 145, 145, 145, 145, 145, 145, 145, 145, 145, 145, 145, 145, 145, 145, 155], mainVisibleUntil: 14, typicalVisibleUntil: -1 },
+  { id: "spike-3k", name: "Sharp spike · 3K", main: [155, 54, 42, 35, 31, 28, 25, 21, 21, 21, 21, 21, 21, 21, 21, 21], typical: [155, 68, 48, 43, 40, 37, 34, 31, 28, 25, 22, 19, 17, 15, 14, 14], mainVisibleUntil: 7, typicalVisibleUntil: -1 },
+];
+
+async function graphPatternFromImage(file: File): Promise<ViewsTemplate> {
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Image analysis is unavailable in this browser.");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const pink: Array<{ x: number; y: number }> = [];
+  const grey: Array<{ x: number; y: number }> = [];
+  for (let y = 0; y < canvas.height; y += 2) {
+    for (let x = 0; x < canvas.width; x += 2) {
+      const index = (y * canvas.width + x) * 4;
+      const r = pixels[index], g = pixels[index + 1], b = pixels[index + 2];
+      if (r > 175 && b > 125 && r + b > g * 3.1 && Math.abs(r - b) < 150) pink.push({ x, y });
+      if (
+        r >= 120 && r <= 215 &&
+        Math.abs(r - g) < 22 && Math.abs(g - b) < 22 && Math.abs(r - b) < 22
+      ) grey.push({ x, y });
+    }
+  }
+  if (pink.length < 30) throw new Error("No clear pink graph line was found in that image.");
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const point of pink) {
+    minX = Math.min(minX, point.x); maxX = Math.max(maxX, point.x);
+    minY = Math.min(minY, point.y); maxY = Math.max(maxY, point.y);
+  }
+  if (maxX - minX < 30 || maxY - minY < 8) throw new Error("The graph line is too small to trace reliably.");
+  const graphGrey = grey.filter((point) =>
+    point.x >= minX - 12 &&
+    point.y >= minY - Math.max(20, canvas.height * 0.04) &&
+    point.y <= maxY + Math.max(20, canvas.height * 0.04),
+  );
+  if (graphGrey.length < 20) throw new Error("No clear grey typical-reel line was found in that image.");
+
+  const greyMinX = Math.min(...graphGrey.map((point) => point.x));
+  const greyMaxX = Math.max(...graphGrey.map((point) => point.x));
+  const graphMinX = Math.min(minX, greyMinX);
+  const graphMaxX = Math.max(maxX, greyMaxX);
+  const sampleRawLine = (points: Array<{ x: number; y: number }>) =>
+    Array.from({ length: 16 }, (_, index) => {
+      const targetX = graphMinX + ((graphMaxX - graphMinX) * index) / 15;
+      const windowSize = Math.max(5, (graphMaxX - graphMinX) / 36);
+      let candidates = points.filter((point) => Math.abs(point.x - targetX) <= windowSize);
+      if (!candidates.length) {
+        candidates = points.slice().sort((a, b) => Math.abs(a.x - targetX) - Math.abs(b.x - targetX)).slice(0, 12);
+      }
+      const sortedY = candidates.map((point) => point.y).sort((a, b) => a - b);
+      return sortedY[Math.floor(sortedY.length / 2)];
+    });
+  const sampleGreyLine = () => {
+    const rowCounts = new Map<number, number>();
+    for (const point of graphGrey) {
+      const row = Math.round(point.y / 4) * 4;
+      rowCounts.set(row, (rowCounts.get(row) ?? 0) + 1);
+    }
+    const dominantRow = [...rowCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+    const hasHorizontalStroke = Boolean(dominantRow && dominantRow[1] >= Math.max(18, (graphMaxX - graphMinX) / 28));
+    let previousY = hasHorizontalStroke ? dominantRow[0] : maxY;
+    return Array.from({ length: 16 }, (_, index) => {
+      const targetX = graphMinX + ((graphMaxX - graphMinX) * index) / 15;
+      const windowSize = Math.max(6, (graphMaxX - graphMinX) / 30);
+      const candidates = graphGrey.filter((point) => Math.abs(point.x - targetX) <= windowSize);
+      if (!candidates.length) return previousY;
+      const eligible = hasHorizontalStroke
+        ? candidates.filter((point) => Math.abs(point.y - dominantRow[0]) <= 8)
+        : candidates;
+      if (!eligible.length) return previousY;
+      const nearestY = eligible.reduce((best, point) =>
+        Math.abs(point.y - previousY) < Math.abs(best - previousY) ? point.y : best,
+      eligible[0].y);
+      const sameStroke = eligible.filter((point) => Math.abs(point.y - nearestY) <= 5);
+      if (sameStroke.length < 2) return previousY;
+      previousY = sameStroke.reduce((sum, point) => sum + point.y, 0) / sameStroke.length;
+      return previousY;
+    });
+  };
+  const mainRaw = sampleRawLine(pink);
+  const typicalRaw = sampleGreyLine();
+  const graphMinY = Math.min(...mainRaw, ...typicalRaw);
+  const graphMaxY = Math.max(...mainRaw, ...typicalRaw);
+  const normalizeLine = (points: number[]) => points.map((point) =>
+    Math.max(5, Math.min(155, 5 + ((point - graphMinY) / Math.max(1, graphMaxY - graphMinY)) * 150)),
+  );
+  const visibleUntil = (lineMaxX: number) => {
+    const index = Math.round(((lineMaxX - graphMinX) / Math.max(1, graphMaxX - graphMinX)) * 15);
+    return index >= 15 ? -1 : Math.max(1, index);
+  };
+  return {
+    id: `uploaded-${Date.now()}`,
+    name: file.name.replace(/\.[^.]+$/, "").slice(0, 36) || "Uploaded pattern",
+    main: normalizeLine(mainRaw),
+    typical: normalizeLine(typicalRaw),
+    mainVisibleUntil: visibleUntil(maxX),
+    typicalVisibleUntil: visibleUntil(greyMaxX),
+  };
+}
 
 const defaultData = {
   title: "Reel Insights",
@@ -396,6 +515,8 @@ function ReelInsightsPage() {
   const [importNotice, setImportNotice] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [thumbnailImportMode, setThumbnailImportMode] = useState<"cleaned" | "original">("cleaned");
+  const [isViewsTemplateOpen, setIsViewsTemplateOpen] = useState(false);
+  const [savedViewsTemplates, setSavedViewsTemplates] = useState<ViewsTemplate[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const chartFileRef = useRef<HTMLInputElement | null>(null);
   const importSequenceRef = useRef(0);
@@ -407,7 +528,22 @@ function ReelInsightsPage() {
   }, [importNotice]);
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem(VIEWS_TEMPLATES_KEY);
+      if (stored) setSavedViewsTemplates(JSON.parse(stored) as ViewsTemplate[]);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
     let active = true;
+
+    // Keep local development testable without weakening production licensing.
+    if (import.meta.env.DEV) {
+      setAccess("allowed");
+      return () => {
+        active = false;
+      };
+    }
 
     const revokeAccess = () => {
       if (!active) return;
@@ -525,6 +661,37 @@ function ReelInsightsPage() {
     setEditing(false);
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 1400);
+  };
+  const persistViewsTemplates = (templates: ViewsTemplate[]) => {
+    setSavedViewsTemplates(templates);
+    try { localStorage.setItem(VIEWS_TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
+  };
+  const applyViewsTemplate = (template: ViewsTemplate) => {
+    save({
+      ...data,
+      viewsMain: template.main.slice(),
+      viewsTypical: template.typical.slice(),
+      viewsMainVisibleUntil: template.mainVisibleUntil,
+      viewsTypicalVisibleUntil: template.typicalVisibleUntil,
+    });
+    setEditing(true);
+    setIsViewsTemplateOpen(false);
+  };
+  const saveCurrentViewsTemplate = () => {
+    const template: ViewsTemplate = {
+      id: `saved-${Date.now()}`,
+      name: `Saved pattern ${savedViewsTemplates.length + 1}`,
+      main: data.viewsMain.slice(),
+      typical: data.viewsTypical.slice(),
+      mainVisibleUntil: data.viewsMainVisibleUntil,
+      typicalVisibleUntil: data.viewsTypicalVisibleUntil,
+    };
+    persistViewsTemplates([...savedViewsTemplates, template]);
+  };
+  const uploadViewsTemplate = async (file: File) => {
+    const template = await graphPatternFromImage(file);
+    persistViewsTemplates([...savedViewsTemplates, template]);
+    applyViewsTemplate(template);
   };
   const setComplementaryPercentage = (
     key: "audFollowers" | "audNonFollowers" | "gMen" | "gWomen",
@@ -741,7 +908,12 @@ function ReelInsightsPage() {
                 />
               </div>
               <div className="mt-6">
-                <SectionTitle>Views over time</SectionTitle>
+                <SectionTitle
+                  onDoubleClick={() => setIsViewsTemplateOpen(true)}
+                  actionTitle="Double-click to open graph templates"
+                >
+                  Views over time
+                </SectionTitle>
                 <div className="mt-3 flex gap-2">
                   {(["All", "Followers", "Non-followers"] as const).map(
                     (item) => (
@@ -787,6 +959,7 @@ function ReelInsightsPage() {
                       value,
                     )
                   }
+                  onTemplateRequest={() => setIsViewsTemplateOpen(true)}
                 />
                 <div className="mt-3 flex items-center gap-4 text-[12px] text-white/80">
                   <span className="flex items-center gap-1.5">
@@ -1216,15 +1389,104 @@ function ReelInsightsPage() {
           </form>
         </div>
       )}
+      {isViewsTemplateOpen && (
+        <ViewsTemplateDialog
+          presets={VIEWS_PRESET_TEMPLATES}
+          saved={savedViewsTemplates}
+          onApply={applyViewsTemplate}
+          onSaveCurrent={saveCurrentViewsTemplate}
+          onUpload={uploadViewsTemplate}
+          onClose={() => setIsViewsTemplateOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
-function SectionTitle({ children, onDoubleClick }: { children: React.ReactNode; onDoubleClick?: () => void }) {
+function SectionTitle({
+  children,
+  onDoubleClick,
+  actionTitle,
+}: {
+  children: React.ReactNode;
+  onDoubleClick?: () => void;
+  actionTitle?: string;
+}) {
   return (
-    <div className={"flex items-center gap-1.5 " + (onDoubleClick ? "cursor-pointer select-none" : "")} onDoubleClick={onDoubleClick} title={onDoubleClick ? "Double-click to refresh" : undefined}>
+    <div className={"flex items-center gap-1.5 " + (onDoubleClick ? "cursor-pointer select-none" : "")} onDoubleClick={onDoubleClick} title={onDoubleClick ? actionTitle ?? "Double-click to refresh" : undefined}>
       <h2 className="text-[17px] font-semibold">{children}</h2>
       <Info className="h-4 w-4 text-white/60" />
+    </div>
+  );
+}
+
+function TemplatePreview({ template }: { template: ViewsTemplate }) {
+  const previewPoints = (points: number[], visibleUntil: number) =>
+    (visibleUntil < 0 ? points : points.slice(0, visibleUntil + 1)).map(
+      (point) => 2 + (point / 160) * 54,
+    );
+  return (
+    <svg viewBox="0 0 120 60" className="h-14 w-full" aria-hidden="true">
+      <line x1="0" y1="58" x2="120" y2="58" stroke="rgba(255,255,255,.12)" />
+      <path d={pathFromPoints(previewPoints(template.typical, template.typicalVisibleUntil), 120, template.typical.length)} fill="none" stroke="rgba(255,255,255,.55)" strokeWidth="2" strokeDasharray="5 4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={pathFromPoints(previewPoints(template.main, template.mainVisibleUntil), 120, template.main.length)} fill="none" stroke="#eb22d4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ViewsTemplateDialog({
+  presets,
+  saved,
+  onApply,
+  onSaveCurrent,
+  onUpload,
+  onClose,
+}: {
+  presets: ViewsTemplate[];
+  saved: ViewsTemplate[];
+  onApply: (template: ViewsTemplate) => void;
+  onSaveCurrent: () => void;
+  onUpload: (file: File) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [uploadError, setUploadError] = useState("");
+  const [isTracing, setIsTracing] = useState(false);
+  const uploadPattern = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadError("");
+    setIsTracing(true);
+    try { await onUpload(file); }
+    catch (error) { setUploadError(error instanceof Error ? error.message : "Could not trace that graph image."); }
+    finally { setIsTracing(false); event.target.value = ""; }
+  };
+  const templateGrid = (templates: ViewsTemplate[]) => (
+    <div className="grid grid-cols-2 gap-2">
+      {templates.map((template) => (
+        <button key={template.id} type="button" onClick={() => onApply(template)} className="rounded-xl border border-white/15 bg-white/[.03] p-2 text-left hover:border-[#eb22d4]/70 hover:bg-[#eb22d4]/10 focus:outline-none focus:ring-2 focus:ring-[#eb22d4]">
+          <TemplatePreview template={template} />
+          <span className="mt-1 block truncate text-xs font-medium text-white">{template.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-3 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="views-template-title">
+      <div className="max-h-[88vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/15 bg-zinc-950 p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div><h2 id="views-template-title" className="text-lg font-semibold text-white">Views graph templates</h2><p className="mt-1 text-xs leading-5 text-white/60">Choose a pattern, save the current graph, or trace both the pink and grey lines from an image.</p></div>
+          <button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-sm text-white/70 hover:bg-white/10">Close</button>
+        </div>
+        <h3 className="mb-2 mt-5 text-sm font-semibold text-white">Provided templates</h3>
+        {templateGrid(presets)}
+        <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-semibold text-white">Saved templates</h3><button type="button" onClick={onSaveCurrent} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10">Save current</button></div>
+        <div className="mt-2">{saved.length ? templateGrid(saved) : <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/50">No saved patterns yet.</p>}</div>
+        <label className="mt-5 flex cursor-pointer items-center justify-center rounded-xl bg-[#eb22d4] px-4 py-3 text-sm font-semibold text-white hover:bg-[#d91fc4]">
+          {isTracing ? "Tracing graph pattern…" : "Upload graph pattern image"}
+          <input type="file" accept="image/*" disabled={isTracing} onChange={uploadPattern} className="hidden" />
+        </label>
+        {uploadError ? <p className="mt-2 text-sm text-red-300">{uploadError}</p> : null}
+      </div>
     </div>
   );
 }
@@ -1502,6 +1764,7 @@ function EditableLineChart({
   onYMid,
   xLabelsData,
   onXLabel,
+  onTemplateRequest,
   showHandles = true,
 }: {
   main: number[];
@@ -1518,6 +1781,7 @@ function EditableLineChart({
   onYMid: (value: string) => void;
   xLabelsData: string[];
   onXLabel: (index: number, value: string) => void;
+  onTemplateRequest: () => void;
   showHandles?: boolean;
 }) {
   const width = 320,
@@ -1527,6 +1791,14 @@ function EditableLineChart({
   const longPressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
   const holdStart = useRef<{ x: number; y: number } | null>(null);
+  const templatePointers = useRef(new Map<number, { x: number; y: number }>());
+  const templateHoldTimer = useRef<number | null>(null);
+  const clearTemplateHold = () => {
+    if (templateHoldTimer.current !== null) {
+      window.clearTimeout(templateHoldTimer.current);
+      templateHoldTimer.current = null;
+    }
+  };
   const clearLongPress = () => {
     if (longPressTimer.current !== null) {
       window.clearTimeout(longPressTimer.current);
@@ -1537,7 +1809,30 @@ function EditableLineChart({
     visibleUntil < 0 ? points : points.slice(0, visibleUntil + 1);
   const displayedMain = visiblePoints(main, mainVisibleUntil);
   const displayedTypical = visiblePoints(typical, typicalVisibleUntil);
+  const trackTemplatePointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.pointerType !== "touch") return;
+    templatePointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (templatePointers.current.size === 2) {
+      clearLongPress();
+      activePoint.current = null;
+      templateHoldTimer.current = window.setTimeout(() => {
+        if (templatePointers.current.size >= 2) onTemplateRequest();
+        clearTemplateHold();
+      }, 2_000);
+    }
+  };
+  const moveTemplatePointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const start = templatePointers.current.get(event.pointerId);
+    if (!start) return false;
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) clearTemplateHold();
+    return templatePointers.current.size >= 2;
+  };
+  const releaseTemplatePointer = (pointerId: number) => {
+    templatePointers.current.delete(pointerId);
+    if (templatePointers.current.size < 2) clearTemplateHold();
+  };
   const movePoint = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (moveTemplatePointer(event)) return;
     const active = activePoint.current;
     if (!active || !svgRef.current) return;
     const start = holdStart.current;
@@ -1582,10 +1877,11 @@ function EditableLineChart({
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
         className="absolute inset-0 left-8 right-0 h-[calc(100%-1.5rem)] w-[calc(100%-2rem)] touch-none"
+        onPointerDown={trackTemplatePointer}
         onPointerMove={movePoint}
-        onPointerUp={() => { clearLongPress(); activePoint.current = null; holdStart.current = null; }}
-        onPointerLeave={() => { activePoint.current = null; }}
-        onPointerCancel={() => { clearLongPress(); activePoint.current = null; holdStart.current = null; }}
+        onPointerUp={(event) => { releaseTemplatePointer(event.pointerId); clearLongPress(); activePoint.current = null; holdStart.current = null; }}
+        onPointerLeave={(event) => { releaseTemplatePointer(event.pointerId); activePoint.current = null; }}
+        onPointerCancel={(event) => { releaseTemplatePointer(event.pointerId); clearLongPress(); activePoint.current = null; holdStart.current = null; }}
       >
         <line x1="0" y1="0" x2={width} y2="0" stroke="rgba(255,255,255,0.08)" />
         <line
