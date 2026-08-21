@@ -92,17 +92,57 @@ async function graphPatternFromImage(file: File): Promise<ViewsTemplate> {
     minY = Math.min(minY, point.y); maxY = Math.max(maxY, point.y);
   }
   if (maxX - minX < 30 || maxY - minY < 8) throw new Error("The graph line is too small to trace reliably.");
+
+  // Locate the chart grid before sampling either line. Using the fixed plot
+  // rectangle preserves absolute top/bottom positions and prevents a partial
+  // line from being stretched across the full chart.
+  const rawGridRows: Array<{ y: number; count: number; minX: number; maxX: number }> = [];
+  const scanLeft = Math.max(0, Math.floor(minX - canvas.width * 0.03));
+  const scanRight = Math.min(canvas.width - 1, Math.floor(canvas.width * 0.98));
+  for (let y = 0; y < canvas.height; y += 1) {
+    let count = 0, rowMinX = Infinity, rowMaxX = -Infinity;
+    for (let x = scanLeft; x <= scanRight; x += 3) {
+      const index = (y * canvas.width + x) * 4;
+      const r = pixels[index], g = pixels[index + 1], b = pixels[index + 2];
+      const neutral = Math.max(r, g, b) - Math.min(r, g, b) < 10;
+      const brightness = (r + g + b) / 3;
+      if (neutral && brightness >= 18 && brightness <= 75) {
+        count += 1;
+        rowMinX = Math.min(rowMinX, x);
+        rowMaxX = Math.max(rowMaxX, x);
+      }
+    }
+    if (count >= Math.max(25, (scanRight - scanLeft) / 18)) {
+      rawGridRows.push({ y, count, minX: rowMinX, maxX: rowMaxX });
+    }
+  }
+  const gridRows: typeof rawGridRows = [];
+  for (const row of rawGridRows) {
+    const previous = gridRows.at(-1);
+    if (previous && row.y - previous.y <= 3) {
+      if (row.count > previous.count) gridRows[gridRows.length - 1] = row;
+    } else {
+      gridRows.push(row);
+    }
+  }
+  const relevantGridRows = gridRows.filter((row) =>
+    row.y >= minY - canvas.height * 0.18 && row.y <= maxY + canvas.height * 0.12,
+  );
+  const plotTop = relevantGridRows.length >= 2 ? relevantGridRows[0].y : Math.max(0, minY - canvas.height * 0.12);
+  const plotBottom = relevantGridRows.length >= 2 ? relevantGridRows.at(-1)!.y : Math.min(canvas.height - 1, maxY);
+  const graphMinX = relevantGridRows.length >= 2
+    ? Math.min(minX, ...relevantGridRows.map((row) => row.minX))
+    : minX;
+  const graphMaxX = relevantGridRows.length >= 2
+    ? Math.max(...relevantGridRows.map((row) => row.maxX))
+    : canvas.width * 0.96;
   const graphGrey = grey.filter((point) =>
-    point.x >= minX - 12 &&
-    point.y >= minY - Math.max(20, canvas.height * 0.04) &&
-    point.y <= maxY + Math.max(20, canvas.height * 0.04),
+    point.x >= graphMinX - 10 && point.x <= graphMaxX + 10 &&
+    point.y >= plotTop - 10 && point.y <= plotBottom + 10,
   );
   if (graphGrey.length < 20) throw new Error("No clear grey typical-reel line was found in that image.");
 
-  const greyMinX = Math.min(...graphGrey.map((point) => point.x));
   const greyMaxX = Math.max(...graphGrey.map((point) => point.x));
-  const graphMinX = Math.min(minX, greyMinX);
-  const graphMaxX = Math.max(maxX, greyMaxX);
   const sampleRawLine = (points: Array<{ x: number; y: number }>) =>
     Array.from({ length: 16 }, (_, index) => {
       const targetX = graphMinX + ((graphMaxX - graphMinX) * index) / 15;
@@ -143,10 +183,8 @@ async function graphPatternFromImage(file: File): Promise<ViewsTemplate> {
   };
   const mainRaw = sampleRawLine(pink);
   const typicalRaw = sampleGreyLine();
-  const graphMinY = Math.min(...mainRaw, ...typicalRaw);
-  const graphMaxY = Math.max(...mainRaw, ...typicalRaw);
   const normalizeLine = (points: number[]) => points.map((point) =>
-    Math.max(5, Math.min(155, 5 + ((point - graphMinY) / Math.max(1, graphMaxY - graphMinY)) * 150)),
+    Math.max(5, Math.min(155, 5 + ((point - plotTop) / Math.max(1, plotBottom - plotTop)) * 150)),
   );
   const visibleUntil = (lineMaxX: number) => {
     const index = Math.round(((lineMaxX - graphMinX) / Math.max(1, graphMaxX - graphMinX)) * 15);
@@ -687,6 +725,9 @@ function ReelInsightsPage() {
       typicalVisibleUntil: data.viewsTypicalVisibleUntil,
     };
     persistViewsTemplates([...savedViewsTemplates, template]);
+  };
+  const deleteViewsTemplate = (templateId: string) => {
+    persistViewsTemplates(savedViewsTemplates.filter((template) => template.id !== templateId));
   };
   const uploadViewsTemplate = async (file: File) => {
     const template = await graphPatternFromImage(file);
@@ -1395,6 +1436,7 @@ function ReelInsightsPage() {
           saved={savedViewsTemplates}
           onApply={applyViewsTemplate}
           onSaveCurrent={saveCurrentViewsTemplate}
+          onDelete={deleteViewsTemplate}
           onUpload={uploadViewsTemplate}
           onClose={() => setIsViewsTemplateOpen(false)}
         />
@@ -1439,6 +1481,7 @@ function ViewsTemplateDialog({
   saved,
   onApply,
   onSaveCurrent,
+  onDelete,
   onUpload,
   onClose,
 }: {
@@ -1446,6 +1489,7 @@ function ViewsTemplateDialog({
   saved: ViewsTemplate[];
   onApply: (template: ViewsTemplate) => void;
   onSaveCurrent: () => void;
+  onDelete: (templateId: string) => void;
   onUpload: (file: File) => Promise<void>;
   onClose: () => void;
 }) {
@@ -1460,13 +1504,25 @@ function ViewsTemplateDialog({
     catch (error) { setUploadError(error instanceof Error ? error.message : "Could not trace that graph image."); }
     finally { setIsTracing(false); event.target.value = ""; }
   };
-  const templateGrid = (templates: ViewsTemplate[]) => (
+  const templateGrid = (templates: ViewsTemplate[], deletable = false) => (
     <div className="grid grid-cols-2 gap-2">
       {templates.map((template) => (
-        <button key={template.id} type="button" onClick={() => onApply(template)} className="rounded-xl border border-white/15 bg-white/[.03] p-2 text-left hover:border-[#eb22d4]/70 hover:bg-[#eb22d4]/10 focus:outline-none focus:ring-2 focus:ring-[#eb22d4]">
-          <TemplatePreview template={template} />
-          <span className="mt-1 block truncate text-xs font-medium text-white">{template.name}</span>
-        </button>
+        <div key={template.id} className="relative rounded-xl border border-white/15 bg-white/[.03] hover:border-[#eb22d4]/70 hover:bg-[#eb22d4]/10">
+          <button type="button" onClick={() => onApply(template)} className="w-full rounded-xl p-2 text-left focus:outline-none focus:ring-2 focus:ring-[#eb22d4]">
+            <TemplatePreview template={template} />
+            <span className={"mt-1 block truncate text-xs font-medium text-white " + (deletable ? "pr-12" : "")}>{template.name}</span>
+          </button>
+          {deletable ? (
+            <button
+              type="button"
+              onClick={() => onDelete(template.id)}
+              aria-label={`Delete ${template.name}`}
+              className="absolute bottom-1.5 right-1.5 rounded-md px-2 py-1 text-[10px] font-medium text-red-300 hover:bg-red-500/15 focus:outline-none focus:ring-2 focus:ring-red-400"
+            >
+              Delete
+            </button>
+          ) : null}
+        </div>
       ))}
     </div>
   );
@@ -1480,7 +1536,7 @@ function ViewsTemplateDialog({
         <h3 className="mb-2 mt-5 text-sm font-semibold text-white">Provided templates</h3>
         {templateGrid(presets)}
         <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-semibold text-white">Saved templates</h3><button type="button" onClick={onSaveCurrent} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10">Save current</button></div>
-        <div className="mt-2">{saved.length ? templateGrid(saved) : <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/50">No saved patterns yet.</p>}</div>
+        <div className="mt-2">{saved.length ? templateGrid(saved, true) : <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/50">No saved patterns yet.</p>}</div>
         <label className="mt-5 flex cursor-pointer items-center justify-center rounded-xl bg-[#eb22d4] px-4 py-3 text-sm font-semibold text-white hover:bg-[#d91fc4]">
           {isTracing ? "Tracing graph pattern…" : "Upload graph pattern image"}
           <input type="file" accept="image/*" disabled={isTracing} onChange={uploadPattern} className="hidden" />
