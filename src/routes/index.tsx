@@ -30,6 +30,8 @@ export const Route = createFileRoute("/")({ component: ReelInsightsPage });
 
 const STORAGE_KEY = "reel-insights-data-v3";
 const VIEWS_TEMPLATES_KEY = "reel-insights-views-templates-v1";
+const WATCH_TEMPLATES_KEY = "reel-insights-watch-templates-v1";
+const LIKES_TEMPLATES_KEY = "reel-insights-likes-templates-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
 const defaultViewsMain = [
   155, 152, 148, 142, 135, 128, 120, 112, 104, 96, 86, 76, 65, 52, 38, 25,
@@ -52,6 +54,76 @@ type ViewsTemplate = {
   mainVisibleUntil: number;
   typicalVisibleUntil: number;
 };
+
+type WatchTemplate = { id: string; name: string; points: number[]; visibleUntil: number; xEnd: string; yTop?: string; yMid?: string };
+const WATCH_PRESET_TEMPLATES: WatchTemplate[] = [
+  { id: "watch-125", name: "Long fade · 1:25", points: [10, 48, 68, 75, 86, 92, 99, 102, 103, 104, 108, 112, 116, 117, 117, 122], visibleUntil: -1, xEnd: "1:25" },
+  { id: "watch-134", name: "Stepped fade · 1:34", points: [10, 36, 53, 62, 68, 72, 76, 78, 78, 81, 86, 88, 88, 90, 96, 103], visibleUntil: -1, xEnd: "1:34" },
+  { id: "watch-154", name: "Deep retention · 1:54", points: [10, 31, 47, 54, 70, 79, 81, 94, 97, 105, 106, 107, 111, 113, 114, 115], visibleUntil: -1, xEnd: "1:54" },
+  { id: "watch-058", name: "Quick fade · 0:58", points: [10, 45, 64, 77, 85, 89, 96, 98, 99, 100, 101, 102, 103, 104, 106, 106], visibleUntil: -1, xEnd: "0:58" },
+];
+const LIKES_PRESET_TEMPLATES: WatchTemplate[] = [
+  { id: "likes-154-dense", name: "Dense spikes · 1:54", points: [22, 90, 118, 105, 116, 96, 124, 112, 122, 72, 108, 126, 128, 119, 82, 116, 128, 129, 110, 126, 130, 128, 129, 126, 118, 126, 121, 128, 125, 129, 128, 66], visibleUntil: -1, xEnd: "1:54", yTop: "10%", yMid: "5%" },
+  { id: "likes-118-varied", name: "Varied spikes · 1:18", points: [23, 98, 93, 129, 99, 110, 91, 58, 123, 109, 118, 112, 120, 108, 126, 116, 122, 128, 119, 114, 126, 116, 128, 108, 120, 117, 101, 128, 109, 112, 129, 105], visibleUntil: -1, xEnd: "1:18", yTop: "10%", yMid: "5%" },
+  { id: "likes-134-sparse", name: "Sparse spikes · 1:34", points: [82, 110, 96, 130, 130, 118, 130, 117, 130, 130, 115, 104, 130, 130, 130, 122, 130, 130, 112, 130, 130, 130, 130, 130, 104, 130, 130, 118, 130, 110, 130, 46], visibleUntil: -1, xEnd: "1:34", yTop: "20%", yMid: "10%" },
+  { id: "likes-223-tail", name: "Long tail · 2:23", points: [58, 96, 116, 126, 122, 130, 125, 130, 127, 130, 126, 129, 125, 130, 127, 130, 126, 130, 125, 130, 128, 130, 126, 130, 82, 130, 127, 130, 118, 130, 128, 86], visibleUntil: -1, xEnd: "2:23", yTop: "20%", yMid: "10%" },
+];
+
+async function watchPatternFromImage(file: File, pointCount = 16): Promise<WatchTemplate> {
+  const bitmap = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("Image analysis is unavailable in this browser.");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close();
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const pink: Array<{ x: number; y: number }> = [];
+  for (let y = 0; y < canvas.height; y += 2) for (let x = 0; x < canvas.width; x += 2) {
+    const offset = (y * canvas.width + x) * 4;
+    const r = pixels[offset], g = pixels[offset + 1], b = pixels[offset + 2];
+    if (r > 175 && b > 125 && r + b > g * 3.1 && Math.abs(r - b) < 150) pink.push({ x, y });
+  }
+  if (pink.length < 30) throw new Error("No clear pink retention line was found in that image.");
+  const minX = Math.min(...pink.map((point) => point.x));
+  const maxX = Math.max(...pink.map((point) => point.x));
+  const minY = Math.min(...pink.map((point) => point.y));
+  const maxY = Math.max(...pink.map((point) => point.y));
+  const rowScores: Array<{ y: number; count: number; minX: number; maxX: number }> = [];
+  for (let y = 0; y < canvas.height; y += 1) {
+    let count = 0, rowMin = Infinity, rowMax = -Infinity;
+    for (let x = Math.max(0, minX - 20); x < canvas.width * .98; x += 3) {
+      const offset = (y * canvas.width + x) * 4;
+      const r = pixels[offset], g = pixels[offset + 1], b = pixels[offset + 2];
+      const light = (r + g + b) / 3;
+      if (Math.max(r, g, b) - Math.min(r, g, b) < 10 && light >= 18 && light <= 75) {
+        count++; rowMin = Math.min(rowMin, x); rowMax = Math.max(rowMax, x);
+      }
+    }
+    if (count > Math.max(25, canvas.width / 20)) rowScores.push({ y, count, minX: rowMin, maxX: rowMax });
+  }
+  const rows: typeof rowScores = [];
+  for (const row of rowScores) {
+    const previous = rows.at(-1);
+    if (previous && row.y - previous.y <= 3) { if (row.count > previous.count) rows[rows.length - 1] = row; }
+    else rows.push(row);
+  }
+  const relevant = rows.filter((row) => row.y >= minY - canvas.height * .15 && row.y <= maxY + canvas.height * .15);
+  const plotTop = relevant.length >= 2 ? relevant[0].y : minY;
+  const plotBottom = relevant.length >= 2 ? relevant.at(-1)!.y : Math.min(canvas.height - 1, maxY + canvas.height * .08);
+  const graphLeft = relevant.length >= 2 ? Math.min(minX, ...relevant.map((row) => row.minX)) : minX;
+  const graphRight = relevant.length >= 2 ? Math.max(...relevant.map((row) => row.maxX)) : canvas.width * .96;
+  const points = Array.from({ length: pointCount }, (_, index) => {
+    const targetX = graphLeft + ((graphRight - graphLeft) * index) / (pointCount - 1);
+    const nearby = pink.filter((point) => Math.abs(point.x - targetX) <= Math.max(5, (graphRight - graphLeft) / 36));
+    const source = nearby.length ? nearby : pink.slice().sort((a, b) => Math.abs(a.x - targetX) - Math.abs(b.x - targetX)).slice(0, 10);
+    const ys = source.map((point) => point.y).sort((a, b) => a - b);
+    return Math.max(10, Math.min(130, 10 + ((ys[Math.floor(ys.length / 2)] - plotTop) / Math.max(1, plotBottom - plotTop)) * 120));
+  });
+  const endIndex = Math.round(((maxX - graphLeft) / Math.max(1, graphRight - graphLeft)) * (pointCount - 1));
+  return { id: `watch-uploaded-${Date.now()}`, name: file.name.replace(/\.[^.]+$/, "").slice(0, 36) || "Uploaded graph", points, visibleUntil: endIndex >= pointCount - 1 ? -1 : Math.max(1, endIndex), xEnd: "0:56" };
+}
 
 const VIEWS_PRESET_TEMPLATES: ViewsTemplate[] = [
   { id: "fast-6k", name: "Fast rise · 6K", main: [155, 86, 48, 43, 39, 35, 32, 30, 29, 28, 28, 28, 28, 28, 28, 28], typical: [155, 132, 128, 127, 126, 126, 125, 125, 125, 125, 125, 125, 125, 125, 125, 125], mainVisibleUntil: -1, typicalVisibleUntil: -1 },
@@ -555,6 +627,10 @@ function ReelInsightsPage() {
   const [thumbnailImportMode, setThumbnailImportMode] = useState<"cleaned" | "original">("cleaned");
   const [isViewsTemplateOpen, setIsViewsTemplateOpen] = useState(false);
   const [savedViewsTemplates, setSavedViewsTemplates] = useState<ViewsTemplate[]>([]);
+  const [isWatchTemplateOpen, setIsWatchTemplateOpen] = useState(false);
+  const [savedWatchTemplates, setSavedWatchTemplates] = useState<WatchTemplate[]>([]);
+  const [isLikesTemplateOpen, setIsLikesTemplateOpen] = useState(false);
+  const [savedLikesTemplates, setSavedLikesTemplates] = useState<WatchTemplate[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const chartFileRef = useRef<HTMLInputElement | null>(null);
   const importSequenceRef = useRef(0);
@@ -569,6 +645,20 @@ function ReelInsightsPage() {
     try {
       const stored = localStorage.getItem(VIEWS_TEMPLATES_KEY);
       if (stored) setSavedViewsTemplates(JSON.parse(stored) as ViewsTemplate[]);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(LIKES_TEMPLATES_KEY);
+      if (stored) setSavedLikesTemplates(JSON.parse(stored) as WatchTemplate[]);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(WATCH_TEMPLATES_KEY);
+      if (stored) setSavedWatchTemplates(JSON.parse(stored) as WatchTemplate[]);
     } catch {}
   }, []);
 
@@ -734,6 +824,51 @@ function ReelInsightsPage() {
     persistViewsTemplates([...savedViewsTemplates, template]);
     applyViewsTemplate(template);
   };
+  const persistWatchTemplates = (templates: WatchTemplate[]) => {
+    setSavedWatchTemplates(templates);
+    try { localStorage.setItem(WATCH_TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
+  };
+  const applyWatchTemplate = (template: WatchTemplate) => {
+    save({ ...data, watch: template.points.slice(), watchVisibleUntil: template.visibleUntil, watchX1: template.xEnd });
+    setEditing(true);
+    setIsWatchTemplateOpen(false);
+  };
+  const saveCurrentWatchTemplate = () => persistWatchTemplates([...savedWatchTemplates, {
+    id: `watch-saved-${Date.now()}`,
+    name: `Saved retention ${savedWatchTemplates.length + 1}`,
+    points: data.watch.slice(), visibleUntil: data.watchVisibleUntil, xEnd: data.watchX1,
+  }]);
+  const deleteWatchTemplate = (templateId: string) =>
+    persistWatchTemplates(savedWatchTemplates.filter((template) => template.id !== templateId));
+  const uploadWatchTemplate = async (file: File) => {
+    const traced = await watchPatternFromImage(file);
+    const template = { ...traced, xEnd: data.watchX1 };
+    persistWatchTemplates([...savedWatchTemplates, template]);
+    applyWatchTemplate(template);
+  };
+  const persistLikesTemplates = (templates: WatchTemplate[]) => {
+    setSavedLikesTemplates(templates);
+    try { localStorage.setItem(LIKES_TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
+  };
+  const applyLikesTemplate = (template: WatchTemplate) => {
+    save({
+      ...data, likesOverTime: template.points.slice(), likesVisibleUntil: template.visibleUntil,
+      likesX1: template.xEnd, likesYTop: template.yTop ?? data.likesYTop, likesYMid: template.yMid ?? data.likesYMid,
+    });
+    setEditing(true); setIsLikesTemplateOpen(false);
+  };
+  const saveCurrentLikesTemplate = () => persistLikesTemplates([...savedLikesTemplates, {
+    id: `likes-saved-${Date.now()}`, name: `Saved likes pattern ${savedLikesTemplates.length + 1}`,
+    points: data.likesOverTime.slice(), visibleUntil: data.likesVisibleUntil, xEnd: data.likesX1,
+    yTop: data.likesYTop, yMid: data.likesYMid,
+  }]);
+  const deleteLikesTemplate = (templateId: string) =>
+    persistLikesTemplates(savedLikesTemplates.filter((template) => template.id !== templateId));
+  const uploadLikesTemplate = async (file: File) => {
+    const traced = await watchPatternFromImage(file, 32);
+    const template = { ...traced, id: `likes-uploaded-${Date.now()}`, xEnd: data.likesX1, yTop: data.likesYTop, yMid: data.likesYMid };
+    persistLikesTemplates([...savedLikesTemplates, template]); applyLikesTemplate(template);
+  };
   const setComplementaryPercentage = (
     key: "audFollowers" | "audNonFollowers" | "gMen" | "gWomen",
     oppositeKey: "audFollowers" | "audNonFollowers" | "gMen" | "gWomen",
@@ -837,7 +972,7 @@ function ReelInsightsPage() {
             />
           </button>
           <div className="relative">
-            <button onClick={() => setIsTrendMenuOpen((open) => !open)} aria-label="Thumbnail options" aria-expanded={isTrendMenuOpen} className="p-1 text-white/75 hover:text-zinc-100">
+            <button onClick={() => setIsTrendMenuOpen((open) => !open)} aria-label="Thumbnail options" aria-expanded={isTrendMenuOpen} className="p-1 text-zinc-100 hover:text-white">
               <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
             </button>
             {isTrendMenuOpen && (
@@ -848,7 +983,7 @@ function ReelInsightsPage() {
               </div>
             )}
           </div>
-          <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-white/75 hover:text-zinc-100">
+          <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-zinc-100 hover:text-white">
             <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
           </button>
         </header>
@@ -863,6 +998,7 @@ function ReelInsightsPage() {
                 src={thumb}
                 alt="Reel thumbnail"
                 className="h-full w-full object-cover"
+                decoding="async"
               />
               <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100">
                 Change photo
@@ -1100,6 +1236,7 @@ function ReelInsightsPage() {
                 title="How long people watched your reel"
                 thumb={chartThumb}
                 onChangeThumb={() => chartFileRef.current?.click()}
+                onTemplateRequest={() => setIsWatchTemplateOpen(true)}
               >
                 <EditableSingleChart
                   data={data.watch}
@@ -1118,6 +1255,7 @@ function ReelInsightsPage() {
                   onXLabel={(index, value) =>
                     set((["watchX0", "watchX1"] as const)[index], value)
                   }
+                  onTemplateRequest={() => setIsWatchTemplateOpen(true)}
                 />
               </MediaChart>
               <div className="mt-6">
@@ -1217,7 +1355,7 @@ function ReelInsightsPage() {
                   />
                 </div>
               </div>
-              <MediaChart title="When people liked your reel" thumb={chartThumb} onChangeThumb={() => chartFileRef.current?.click()}>
+              <MediaChart title="When people liked your reel" thumb={chartThumb} onChangeThumb={() => chartFileRef.current?.click()} onTemplateRequest={() => setIsLikesTemplateOpen(true)}>
                 <EditableSingleChart
                   data={data.likesOverTime}
                   onChange={(value) => {
@@ -1235,6 +1373,7 @@ function ReelInsightsPage() {
                   onXLabel={(index, value) =>
                     set((["likesX0", "likesX1"] as const)[index], value)
                   }
+                  onTemplateRequest={() => setIsLikesTemplateOpen(true)}
                 />
               </MediaChart>
             </>
@@ -1441,6 +1580,32 @@ function ReelInsightsPage() {
           onClose={() => setIsViewsTemplateOpen(false)}
         />
       )}
+      {isWatchTemplateOpen && (
+        <WatchTemplateDialog
+          presets={WATCH_PRESET_TEMPLATES}
+          saved={savedWatchTemplates}
+          onApply={applyWatchTemplate}
+          onSaveCurrent={saveCurrentWatchTemplate}
+          onDelete={deleteWatchTemplate}
+          onUpload={uploadWatchTemplate}
+          onClose={() => setIsWatchTemplateOpen(false)}
+        />
+      )}
+      {isLikesTemplateOpen && (
+        <WatchTemplateDialog
+          presets={LIKES_PRESET_TEMPLATES}
+          saved={savedLikesTemplates}
+          onApply={applyLikesTemplate}
+          onSaveCurrent={saveCurrentLikesTemplate}
+          onDelete={deleteLikesTemplate}
+          onUpload={uploadLikesTemplate}
+          onClose={() => setIsLikesTemplateOpen(false)}
+          title="Likes graph templates"
+          description="Choose, save, or trace a likes pattern from an image. Detailed uploads use 32 editable points."
+          uploadLabel="Upload likes graph image"
+          emptyLabel="No saved likes patterns yet."
+        />
+      )}
     </div>
   );
 }
@@ -1546,6 +1711,59 @@ function ViewsTemplateDialog({
     </div>
   );
 }
+function WatchTemplatePreview({ template }: { template: WatchTemplate }) {
+  const points = (template.visibleUntil < 0 ? template.points : template.points.slice(0, template.visibleUntil + 1))
+    .map((point) => 3 + ((point - 10) / 120) * 53);
+  return (
+    <svg viewBox="0 0 120 60" className="h-14 w-full" aria-hidden="true">
+      <line x1="0" y1="57" x2="120" y2="57" stroke="rgba(255,255,255,.12)" />
+      <path d={pathFromPoints(points, 120, template.points.length)} fill="none" stroke="#eb22d4" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function WatchTemplateDialog({ presets, saved, onApply, onSaveCurrent, onDelete, onUpload, onClose, title = "Watch-time graph templates", description = "Choose, save, or trace a retention curve from an image. Partial curves keep their original length.", uploadLabel = "Upload retention graph image", emptyLabel = "No saved retention patterns yet." }: {
+  presets: WatchTemplate[]; saved: WatchTemplate[];
+  onApply: (template: WatchTemplate) => void; onSaveCurrent: () => void;
+  onDelete: (templateId: string) => void; onUpload: (file: File) => Promise<void>; onClose: () => void;
+  title?: string; description?: string; uploadLabel?: string; emptyLabel?: string;
+}) {
+  const [uploadError, setUploadError] = useState("");
+  const [isTracing, setIsTracing] = useState(false);
+  const uploadPattern = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]; if (!file) return;
+    setUploadError(""); setIsTracing(true);
+    try { await onUpload(file); }
+    catch (error) { setUploadError(error instanceof Error ? error.message : "Could not trace that retention image."); }
+    finally { setIsTracing(false); event.target.value = ""; }
+  };
+  const grid = (templates: WatchTemplate[], deletable = false) => (
+    <div className="grid grid-cols-2 gap-2">
+      {templates.map((template) => (
+        <div key={template.id} className="relative rounded-xl border border-white/15 bg-white/[.03] hover:border-[#eb22d4]/70 hover:bg-[#eb22d4]/10">
+          <button type="button" onClick={() => onApply(template)} className="w-full rounded-xl p-2 text-left focus:outline-none focus:ring-2 focus:ring-[#eb22d4]">
+            <WatchTemplatePreview template={template} />
+            <span className={"mt-1 block truncate text-xs font-medium text-white " + (deletable ? "pr-12" : "")}>{template.name}</span>
+          </button>
+          {deletable ? <button type="button" onClick={() => onDelete(template.id)} aria-label={`Delete ${template.name}`} className="absolute bottom-1.5 right-1.5 rounded-md px-2 py-1 text-[10px] font-medium text-red-300 hover:bg-red-500/15 focus:ring-2 focus:ring-red-400">Delete</button> : null}
+        </div>
+      ))}
+    </div>
+  );
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-3 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-labelledby="watch-template-title">
+      <div className="max-h-[88vh] w-full max-w-md overflow-y-auto rounded-2xl border border-white/15 bg-zinc-950 p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4"><div><h2 id="watch-template-title" className="text-lg font-semibold">{title}</h2><p className="mt-1 text-xs leading-5 text-white/60">{description}</p></div><button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-sm text-white/70 hover:bg-white/10">Close</button></div>
+        <h3 className="mb-2 mt-5 text-sm font-semibold">Provided templates</h3>{grid(presets)}
+        <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-semibold">Saved templates</h3><button type="button" onClick={onSaveCurrent} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium hover:bg-white/10">Save current</button></div>
+        <div className="mt-2">{saved.length ? grid(saved, true) : <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/50">{emptyLabel}</p>}</div>
+        <label className="mt-5 flex cursor-pointer items-center justify-center rounded-xl bg-[#eb22d4] px-4 py-3 text-sm font-semibold hover:bg-[#d91fc4]">{isTracing ? "Tracing graph pattern…" : uploadLabel}<input type="file" accept="image/*" disabled={isTracing} onChange={uploadPattern} className="hidden" /></label>
+        {uploadError ? <p className="mt-2 text-sm text-red-300">{uploadError}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 function StatIcon({
   icon,
   value,
@@ -1717,16 +1935,18 @@ function MediaChart({
   title,
   thumb,
   onChangeThumb,
+  onTemplateRequest,
   children,
 }: {
   title: string;
   thumb: string;
   onChangeThumb: () => void;
+  onTemplateRequest?: () => void;
   children: React.ReactNode;
 }) {
   return (
     <div className="mt-6">
-      <SectionTitle>{title}</SectionTitle>
+      <SectionTitle onDoubleClick={onTemplateRequest} actionTitle={onTemplateRequest ? "Double-click to open graph templates" : undefined}>{title}</SectionTitle>
       <div className="mt-4 flex justify-center">
         <button type="button" onClick={onChangeThumb} aria-label={`Change thumbnail for ${title}`} className="group relative h-[160px] w-[110px] overflow-hidden rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]">
           <img
@@ -1734,6 +1954,7 @@ function MediaChart({
             alt={`${title} thumbnail`}
             className="h-full w-full object-cover"
             loading="lazy"
+            decoding="async"
           />
           <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100">Change photo</span>
         </button>
@@ -2025,6 +2246,7 @@ function EditableSingleChart({
   onYMid,
   xLabelsData,
   onXLabel,
+  onTemplateRequest,
 }: {
   data: number[];
   onChange: (value: number[]) => void;
@@ -2037,6 +2259,7 @@ function EditableSingleChart({
   onYMid: (value: string) => void;
   xLabelsData: string[];
   onXLabel: (index: number, value: string) => void;
+  onTemplateRequest?: () => void;
 }) {
   const width = 320,
     height = 140;
@@ -2044,6 +2267,30 @@ function EditableSingleChart({
     onVisibleUntil(visibleUntil === index ? -1 : index);
   });
   const displayedData = visibleUntil < 0 ? data : data.slice(0, visibleUntil + 1);
+  const templatePointers = useRef(new Map<number, { x: number; y: number }>());
+  const templateTimer = useRef<number | null>(null);
+  const clearTemplateTimer = () => {
+    if (templateTimer.current !== null) { window.clearTimeout(templateTimer.current); templateTimer.current = null; }
+  };
+  const trackTemplatePointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (!onTemplateRequest || event.pointerType !== "touch") return;
+    templatePointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (templatePointers.current.size === 2) {
+      clearTemplateTimer();
+      templateTimer.current = window.setTimeout(() => {
+        if (templatePointers.current.size >= 2) onTemplateRequest();
+        clearTemplateTimer();
+      }, 2_000);
+    }
+  };
+  const moveTemplatePointer = (event: React.PointerEvent<SVGSVGElement>) => {
+    const start = templatePointers.current.get(event.pointerId);
+    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) clearTemplateTimer();
+  };
+  const releaseTemplatePointer = (pointerId: number) => {
+    templatePointers.current.delete(pointerId);
+    if (templatePointers.current.size < 2) clearTemplateTimer();
+  };
   return (
     <div className="relative mt-6 h-44 select-none">
       <div className="absolute left-0 top-2 text-[11px] text-white/50">
@@ -2060,10 +2307,11 @@ function EditableSingleChart({
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
         className="absolute inset-0 left-10 right-0 h-[calc(100%-1.5rem)] w-[calc(100%-2.5rem)] touch-none"
-        onPointerMove={drag.onPointerMove}
-        onPointerUp={drag.onPointerUp}
-        onPointerLeave={drag.onPointerUp}
-        onPointerCancel={drag.onPointerUp}
+        onPointerDown={trackTemplatePointer}
+        onPointerMove={(event) => { moveTemplatePointer(event); if (templatePointers.current.size < 2) drag.onPointerMove(event); }}
+        onPointerUp={(event) => { releaseTemplatePointer(event.pointerId); drag.onPointerUp(); }}
+        onPointerLeave={(event) => { releaseTemplatePointer(event.pointerId); drag.onPointerUp(); }}
+        onPointerCancel={(event) => { releaseTemplatePointer(event.pointerId); drag.onPointerUp(); }}
       >
         <line
           x1="0"
