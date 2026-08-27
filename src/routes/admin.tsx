@@ -75,16 +75,23 @@ function AdminPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const requestId = useRef(0);
+  const lastRequestRef = useRef("");
   const debouncedQuery = useDebouncedValue(query.trim(), 350);
+  const debouncedKey = useDebouncedValue(key.trim(), 500);
 
   const invoke = useCallback(
-    async (name: string, body?: unknown, method = "POST") => {
+    async (
+      name: string,
+      adminKey: string,
+      body?: Record<string, unknown>,
+      method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "POST",
+    ) => {
       if (!supabase) throw new Error("License service is not configured.");
 
       const { data, error } = await supabase.functions.invoke<FunctionResponse>(name, {
         method,
         body,
-        headers: { "x-admin-key": key },
+        headers: { "x-admin-key": adminKey },
       });
 
       if (error || data?.error) {
@@ -93,15 +100,19 @@ function AdminPage() {
 
       return data ?? {};
     },
-    [key],
+    [],
   );
 
   const load = useCallback(
-    async (searchQuery = debouncedQuery) => {
-      if (!key.trim()) {
+    async (searchQuery = debouncedQuery, adminKey = debouncedKey, force = false) => {
+      if (!adminKey) {
         setNotice("Enter your admin API key first.");
         return;
       }
+
+      const requestKey = `${adminKey}:${searchQuery}`;
+      if (!force && lastRequestRef.current === requestKey) return;
+      lastRequestRef.current = requestKey;
 
       const currentRequest = ++requestId.current;
       setIsLoading(true);
@@ -109,6 +120,7 @@ function AdminPage() {
       try {
         const data = await invoke(
           `manage-license?q=${encodeURIComponent(searchQuery)}`,
+          adminKey,
           undefined,
           "GET",
         );
@@ -119,18 +131,19 @@ function AdminPage() {
         }
       } catch (error) {
         if (currentRequest === requestId.current) {
+          lastRequestRef.current = "";
           setNotice(error instanceof Error ? error.message : "Could not load licenses.");
         }
       } finally {
         if (currentRequest === requestId.current) setIsLoading(false);
       }
     },
-    [debouncedQuery, invoke, key],
+    [debouncedKey, debouncedQuery, invoke],
   );
 
   useEffect(() => {
-    if (key.trim()) void load(debouncedQuery);
-  }, [debouncedQuery, key, load]);
+    if (debouncedKey) void load(debouncedQuery, debouncedKey);
+  }, [debouncedKey, debouncedQuery, load]);
 
   const replaceLicense = useCallback((updatedLicense: License) => {
     setLicenses((current) =>
@@ -146,7 +159,7 @@ function AdminPage() {
 
     setIsCreating(true);
     try {
-      const data = await invoke("create-license", {
+      const data = await invoke("create-license", key.trim(), {
         plan,
         durationDays: duration === "lifetime" ? null : Number(duration),
       });
@@ -175,8 +188,8 @@ function AdminPage() {
     try {
       const data =
         actionName === "reset"
-          ? await invoke("reset-device", { accessCode })
-          : await invoke("manage-license", { accessCode, action: actionName, days });
+          ? await invoke("reset-device", key.trim(), { accessCode })
+          : await invoke("manage-license", key.trim(), { accessCode, action: actionName, days });
 
       if (actionName === "delete") {
         setLicenses((current) => current.filter((license) => license.access_code !== accessCode));
@@ -241,7 +254,7 @@ function AdminPage() {
             />
             <button
               type="button"
-              onClick={() => void load(query.trim())}
+              onClick={() => void load(query.trim(), key.trim(), true)}
               disabled={isLoading}
               className="ml-2 rounded bg-white px-3 py-2 text-black disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -290,7 +303,7 @@ function AdminPage() {
           />
           <button
             type="button"
-            onClick={() => void load(query.trim())}
+            onClick={() => void load(query.trim(), key.trim(), true)}
             disabled={isLoading}
             className="rounded border border-white/20 px-3 py-2 disabled:opacity-60"
           >
@@ -328,7 +341,11 @@ function AdminPage() {
               {licenses.map((license) => {
                 const pending = pendingAction?.startsWith(`${license.access_code}:`);
                 return (
-                  <tr key={license.access_code} className="border-t border-white/10">
+                  <tr
+                    key={license.access_code}
+                    className="border-t border-white/10"
+                    style={{ contentVisibility: "auto", containIntrinsicSize: "52px" }}
+                  >
                     <td className="p-3 font-mono">{license.access_code}</td>
                     <td className="p-3">{license.plan}</td>
                     <td className="p-3">{license.active ? "Active" : "Disabled"}</td>

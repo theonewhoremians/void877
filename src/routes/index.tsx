@@ -578,6 +578,16 @@ async function cleanedThumbnail(source: string) {
 
 function useLocalData() {
   const [data, setData] = useState<DataShape>(defaultData);
+  const latestDataRef = useRef<DataShape>(defaultData);
+  const pendingSaveRef = useRef<DataShape | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const flushPendingSave = () => {
+    if (!pendingSaveRef.current) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pendingSaveRef.current));
+      pendingSaveRef.current = null;
+    } catch {}
+  };
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -587,7 +597,7 @@ function useLocalData() {
         const viewsTypical = stored.viewsTypical ?? defaultViewsTypical;
         const watch = stored.watch ?? defaultWatch;
         const likesOverTime = stored.likesOverTime ?? defaultLikes;
-        setData({
+        const restoredData = {
           ...defaultData,
           ...stored,
           ...(stored.viewsX2 && parseGraphDuration(stored.viewsX2) !== null
@@ -601,16 +611,38 @@ function useLocalData() {
           viewsTypicalVisibleUntil: remapVisibleUntil(stored.viewsTypicalVisibleUntil ?? -1, viewsTypical.length),
           watchVisibleUntil: remapVisibleUntil(stored.watchVisibleUntil ?? -1, watch.length),
           likesVisibleUntil: remapVisibleUntil(stored.likesVisibleUntil ?? -1, likesOverTime.length),
-        });
+        };
+        latestDataRef.current = restoredData;
+        setData(restoredData);
       }
     } catch {}
   }, []);
 
+  useEffect(() => {
+    const flushOnHide = () => {
+      if (document.visibilityState === "hidden") flushPendingSave();
+    };
+    window.addEventListener("pagehide", flushPendingSave);
+    window.addEventListener("beforeunload", flushPendingSave);
+    document.addEventListener("visibilitychange", flushOnHide);
+    return () => {
+      window.removeEventListener("pagehide", flushPendingSave);
+      window.removeEventListener("beforeunload", flushPendingSave);
+      document.removeEventListener("visibilitychange", flushOnHide);
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+      flushPendingSave();
+    };
+  }, []);
+
   const save = (next: DataShape) => {
+    latestDataRef.current = next;
     setData(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {}
+    pendingSaveRef.current = next;
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      flushPendingSave();
+    }, 250);
   };
   const set = <K extends keyof DataShape>(key: K, value: DataShape[K]) => {
     const mirrors: Partial<Record<keyof DataShape, keyof DataShape>> = {
@@ -622,9 +654,9 @@ function useLocalData() {
       follows: "eFollows", eFollows: "follows",
     };
     const mirror = mirrors[key];
-    save({ ...data, [key]: value, ...(mirror ? { [mirror]: value } : {}) });
+    save({ ...latestDataRef.current, [key]: value, ...(mirror ? { [mirror]: value } : {}) });
   };
-  return { data, set, save };
+  return { data, set, save, flushPendingSave };
 }
 
 function AccessGate() {
@@ -723,7 +755,7 @@ function IgBookmark(props: { className?: string }) {
 function ReelInsightsPage() {
   const navigate = useNavigate();
   const [access, setAccess] = useState<AccessState>("checking");
-  const { data, set, save } = useLocalData();
+  const { data, set, save, flushPendingSave } = useLocalData();
   const [tab, setTab] = useState<Tab>("Overview");
   const [audTab, setAudTab] = useState<AudTab>("Country");
   const [viewsTab, setViewsTab] = useState<
@@ -903,6 +935,7 @@ function ReelInsightsPage() {
     if (document.activeElement instanceof HTMLElement)
       document.activeElement.blur();
     save(data);
+    flushPendingSave();
     setEditing(false);
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 1400);
