@@ -33,6 +33,7 @@ const VIEWS_TEMPLATES_KEY = "reel-insights-views-templates-v1";
 const WATCH_TEMPLATES_KEY = "reel-insights-watch-templates-v1";
 const LIKES_TEMPLATES_KEY = "reel-insights-likes-templates-v1";
 const TOP_GAP_KEY = "reel-insights-top-gap-v1";
+const AGE_EDITED_KEYS_KEY = "reel-insights-age-edited-keys-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
 const GRAPH_POINT_COUNT = 32;
 function resamplePoints(points: number[], count = GRAPH_POINT_COUNT) {
@@ -786,6 +787,7 @@ function ReelInsightsPage() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const chartFileRef = useRef<HTMLInputElement | null>(null);
   const importSequenceRef = useRef(0);
+  const editedAgeKeysRef = useRef(new Set<"a1" | "a2" | "a3" | "a4" | "a5" | "a6">());
 
   useEffect(() => {
     if (!importNotice) return;
@@ -802,6 +804,17 @@ function ReelInsightsPage() {
 
   useEffect(() => {
     try { setTopGap(localStorage.getItem(TOP_GAP_KEY) === "on"); } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(AGE_EDITED_KEYS_KEY) ?? "[]") as string[];
+      editedAgeKeysRef.current = new Set(
+        stored.filter((key): key is "a1" | "a2" | "a3" | "a4" | "a5" | "a6" =>
+          ["a1", "a2", "a3", "a4", "a5", "a6"].includes(key),
+        ),
+      );
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -1055,29 +1068,20 @@ function ReelInsightsPage() {
     const opposite = Math.round((100 - percentage) * 10) / 10;
     save({ ...data, [key]: value, [oppositeKey]: `${opposite}%` });
   };
-  const rebalanceCountryPercentages = (
+  const updateCountryPercentage = (
     changedKey: "c1Val" | "c2Val" | "c3Val" | "c4Val" | "c5Val",
     value: string,
   ) => {
-    const keys = ["c1Val", "c2Val", "c3Val", "c4Val", "c5Val"] as const;
-    const changedTenths = Math.round(Math.min(100, Math.max(0, parsePct(value))) * 10);
-    const otherKeys = keys.filter((key) => key !== changedKey);
-    const shares = distributeTenths(
-      1000 - changedTenths,
-      otherKeys.map((key) => parsePct(data[key])),
-    );
-    const tenthsByKey = Object.fromEntries([
-      [changedKey, changedTenths],
-      ...otherKeys.map((key, index) => [key, shares[index]]),
-    ]) as Record<(typeof keys)[number], number>;
+    const percentage = Math.round(Math.min(100, Math.max(0, parsePct(value))) * 10) / 10;
+    const nextValues = { ...data, [changedKey]: `${percentage.toFixed(1)}%` };
     const rankedCountries = ([2, 3, 4, 5] as const)
       .map((row) => ({
-        name: data[`c${row}Name`],
-        tenths: tenthsByKey[`c${row}Val`],
+        name: nextValues[`c${row}Name`],
+        value: nextValues[`c${row}Val`],
       }))
-      .sort((a, b) => b.tenths - a.tenths);
+      .sort((a, b) => parsePct(b.value) - parsePct(a.value));
     const updates: Partial<DataShape> = {
-      c1Val: `${(tenthsByKey.c1Val / 10).toFixed(1)}%`,
+      c1Val: nextValues.c1Val,
     };
     const rankedKeys = [
       ["c2Name", "c2Val"], ["c3Name", "c3Val"],
@@ -1086,8 +1090,47 @@ function ReelInsightsPage() {
     rankedCountries.forEach((country, index) => {
       const [nameKey, valueKey] = rankedKeys[index];
       updates[nameKey] = country.name;
-      updates[valueKey] = `${(country.tenths / 10).toFixed(1)}%`;
+      updates[valueKey] = country.value;
     });
+    save({ ...data, ...updates });
+  };
+  const generateAgeAudience = () => {
+    editedAgeKeysRef.current.clear();
+    try { localStorage.removeItem(AGE_EDITED_KEYS_KEY); } catch {}
+    setEditing(true);
+    save({ ...data, ...randomAgeAudience() });
+  };
+  const updateAgePercentage = (
+    changedKey: "a1" | "a2" | "a3" | "a4" | "a5" | "a6",
+    value: string,
+  ) => {
+    const keys = ["a1", "a2", "a3", "a4", "a5", "a6"] as const;
+    const previouslyEdited = keys.filter(
+      (key) => key !== changedKey && editedAgeKeysRef.current.has(key),
+    );
+    const previousEditedTenths = previouslyEdited.reduce(
+      (sum, key) => sum + Math.round(parsePct(data[key]) * 10),
+      0,
+    );
+    const changedTenths = Math.min(
+      1000 - previousEditedTenths,
+      Math.round(Math.min(100, Math.max(0, parsePct(value))) * 10),
+    );
+    editedAgeKeysRef.current.add(changedKey);
+    const unlockedKeys = keys.filter((key) => !editedAgeKeysRef.current.has(key));
+    const lockedTotal = previousEditedTenths + changedTenths;
+    const unlockedShares = unlockedKeys.length > 0
+      ? distributeTenths(1000 - lockedTotal, unlockedKeys.map((key) => parsePct(data[key])))
+      : [];
+    const updates: Partial<DataShape> = {
+      [changedKey]: `${(changedTenths / 10).toFixed(1)}%`,
+    };
+    unlockedKeys.forEach((key, index) => {
+      updates[key] = `${(unlockedShares[index] / 10).toFixed(1)}%`;
+    });
+    try {
+      localStorage.setItem(AGE_EDITED_KEYS_KEY, JSON.stringify([...editedAgeKeysRef.current]));
+    } catch {}
     save({ ...data, ...updates });
   };
   const openImport = () => {
@@ -1667,8 +1710,7 @@ function ReelInsightsPage() {
               <div className="mt-6">
                 <SectionTitle onDoubleClick={() => {
                   if (audTab === "Age") {
-                    setEditing(true);
-                    save({ ...data, ...randomAgeAudience() });
+                    generateAgeAudience();
                   }
                   if (audTab === "Country") {
                     setEditing(true);
@@ -1683,8 +1725,7 @@ function ReelInsightsPage() {
                       onDoubleClick={() => {
                         if (item === "Age") {
                           setAudTab("Age");
-                          setEditing(true);
-                          save({ ...data, ...randomAgeAudience() });
+                          generateAgeAudience();
                         } else if (item === "Country") {
                           setAudTab("Country");
                           setEditing(true);
@@ -1713,31 +1754,31 @@ function ReelInsightsPage() {
                       name={data.c1Name}
                       val={data.c1Val}
                       onName={(value) => set("c1Name", value)}
-                      onVal={(value) => rebalanceCountryPercentages("c1Val", value)}
+                      onVal={(value) => updateCountryPercentage("c1Val", value)}
                     />
                     <CountryRow
                       name={data.c2Name}
                       val={data.c2Val}
                       onName={(value) => set("c2Name", value)}
-                      onVal={(value) => rebalanceCountryPercentages("c2Val", value)}
+                      onVal={(value) => updateCountryPercentage("c2Val", value)}
                     />
                     <CountryRow
                       name={data.c3Name}
                       val={data.c3Val}
                       onName={(value) => set("c3Name", value)}
-                      onVal={(value) => rebalanceCountryPercentages("c3Val", value)}
+                      onVal={(value) => updateCountryPercentage("c3Val", value)}
                     />
                     <CountryRow
                       name={data.c4Name}
                       val={data.c4Val}
                       onName={(value) => set("c4Name", value)}
-                      onVal={(value) => rebalanceCountryPercentages("c4Val", value)}
+                      onVal={(value) => updateCountryPercentage("c4Val", value)}
                     />
                     <CountryRow
                       name={data.c5Name}
                       val={data.c5Val}
                       onName={(value) => set("c5Name", value)}
-                      onVal={(value) => rebalanceCountryPercentages("c5Val", value)}
+                      onVal={(value) => updateCountryPercentage("c5Val", value)}
                     />
                   </div>
                 )}
@@ -1746,42 +1787,42 @@ function ReelInsightsPage() {
                     <BarRow
                       label="13-17"
                       value={data.a1}
-                      onChange={(value) => set("a1", value)}
+                      onChange={(value) => updateAgePercentage("a1", value)}
                       pct={parsePct(data.a1)}
                       color={IG_PINK}
                     />
                     <BarRow
                       label="18-24"
                       value={data.a2}
-                      onChange={(value) => set("a2", value)}
+                      onChange={(value) => updateAgePercentage("a2", value)}
                       pct={parsePct(data.a2)}
                       color={IG_PINK}
                     />
                     <BarRow
                       label="25-34"
                       value={data.a3}
-                      onChange={(value) => set("a3", value)}
+                      onChange={(value) => updateAgePercentage("a3", value)}
                       pct={parsePct(data.a3)}
                       color={IG_PINK}
                     />
                     <BarRow
                       label="35-44"
                       value={data.a4}
-                      onChange={(value) => set("a4", value)}
+                      onChange={(value) => updateAgePercentage("a4", value)}
                       pct={parsePct(data.a4)}
                       color={IG_PINK}
                     />
                     <BarRow
                       label="45-54"
                       value={data.a5}
-                      onChange={(value) => set("a5", value)}
+                      onChange={(value) => updateAgePercentage("a5", value)}
                       pct={parsePct(data.a5)}
                       color={IG_PINK}
                     />
                     <BarRow
                       label="55-64"
                       value={data.a6}
-                      onChange={(value) => set("a6", value)}
+                      onChange={(value) => updateAgePercentage("a6", value)}
                       pct={parsePct(data.a6)}
                       color={IG_PINK}
                     />
