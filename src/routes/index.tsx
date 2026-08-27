@@ -32,6 +32,7 @@ const STORAGE_KEY = "reel-insights-data-v3";
 const VIEWS_TEMPLATES_KEY = "reel-insights-views-templates-v1";
 const WATCH_TEMPLATES_KEY = "reel-insights-watch-templates-v1";
 const LIKES_TEMPLATES_KEY = "reel-insights-likes-templates-v1";
+const TOP_GAP_KEY = "reel-insights-top-gap-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
 const GRAPH_POINT_COUNT = 32;
 function resamplePoints(points: number[], count = GRAPH_POINT_COUNT) {
@@ -768,6 +769,8 @@ function ReelInsightsPage() {
   const [chartThumb, setChartThumb] = useState<string>(reelThumb);
   const [importedThumb, setImportedThumb] = useState("");
   const [isTrendMenuOpen, setIsTrendMenuOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [topGap, setTopGap] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [reelUrl, setReelUrl] = useState("");
   const [importError, setImportError] = useState("");
@@ -795,6 +798,10 @@ function ReelInsightsPage() {
       const stored = localStorage.getItem(VIEWS_TEMPLATES_KEY);
       if (stored) setSavedViewsTemplates(JSON.parse(stored) as ViewsTemplate[]);
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    try { setTopGap(localStorage.getItem(TOP_GAP_KEY) === "on"); } catch {}
   }, []);
 
   useEffect(() => {
@@ -1086,7 +1093,15 @@ function ReelInsightsPage() {
   const openImport = () => {
     setImportError("");
     setImportNotice("");
+    setIsMoreMenuOpen(false);
     setIsImportOpen(true);
+  };
+  const toggleTopGap = () => {
+    setTopGap((current) => {
+      const next = !current;
+      try { localStorage.setItem(TOP_GAP_KEY, next ? "on" : "off"); } catch {}
+      return next;
+    });
   };
   const handleImport = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1157,7 +1172,10 @@ function ReelInsightsPage() {
       style={{ fontFamily: "'Roboto', system-ui, -apple-system, sans-serif" }}
     >
       <div className="mx-auto max-w-md pb-6">
-        <header className="sticky top-0 z-20 flex items-center gap-3 bg-[#0c0f14]/95 px-4 pb-3 pt-4 backdrop-blur">
+        <header
+          className="sticky top-0 z-20 flex items-center gap-3 bg-[#0c0f14]/95 px-4 pb-3 pt-4 backdrop-blur"
+          style={{ paddingTop: topGap ? "calc(env(safe-area-inset-top, 0px) + 2.5rem)" : undefined }}
+        >
           <button
             aria-label="Back"
             className="-ml-1 p-1 text-white/75 hover:text-zinc-100"
@@ -1190,9 +1208,42 @@ function ReelInsightsPage() {
               </div>
             )}
           </div>
-          <button onClick={openImport} aria-label="Import Instagram reel" className="p-1 text-zinc-100 hover:text-white">
-            <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => {
+                setIsMoreMenuOpen((open) => !open);
+                setIsTrendMenuOpen(false);
+              }}
+              aria-label="More options"
+              aria-expanded={isMoreMenuOpen}
+              className="p-1 text-zinc-100 hover:text-white"
+            >
+              <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
+            </button>
+            {isMoreMenuOpen && (
+              <div className="absolute right-0 top-10 z-30 w-52 rounded-xl border border-white/15 bg-zinc-950 p-1.5 shadow-2xl">
+                <button
+                  type="button"
+                  onClick={openImport}
+                  className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10"
+                >
+                  Import Instagram reel
+                </button>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={topGap}
+                  onClick={toggleTopGap}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10"
+                >
+                  <span>Top gap</span>
+                  <span className={"relative h-5 w-9 rounded-full transition-colors " + (topGap ? "bg-[#eb22d4]" : "bg-white/20")}>
+                    <span className={"absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform " + (topGap ? "translate-x-[18px]" : "translate-x-0.5")} />
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
         </header>
         <div className="flex justify-center pt-4">
           <button
