@@ -33,18 +33,44 @@ const VIEWS_TEMPLATES_KEY = "reel-insights-views-templates-v1";
 const WATCH_TEMPLATES_KEY = "reel-insights-watch-templates-v1";
 const LIKES_TEMPLATES_KEY = "reel-insights-likes-templates-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
-const defaultViewsMain = [
+const GRAPH_POINT_COUNT = 32;
+function resamplePoints(points: number[], count = GRAPH_POINT_COUNT) {
+  if (points.length === count) return points.slice();
+  if (points.length < 2) return Array.from({ length: count }, () => points[0] ?? 0);
+  return Array.from({ length: count }, (_, index) => {
+    const position = (index * (points.length - 1)) / (count - 1);
+    const left = Math.floor(position), right = Math.min(points.length - 1, Math.ceil(position));
+    const ratio = position - left;
+    return points[left] + (points[right] - points[left]) * ratio;
+  });
+}
+function remapVisibleUntil(value: number, oldCount: number, newCount = GRAPH_POINT_COUNT) {
+  if (value < 0 || oldCount < 2) return value;
+  return Math.min(newCount - 1, Math.round((value / (oldCount - 1)) * (newCount - 1)));
+}
+function formatGraphDuration(seconds: number) {
+  const rounded = Math.max(0, Math.round(seconds));
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
+}
+function parseGraphDuration(value: string) {
+  const text = value.trim().toLowerCase();
+  const clock = text.match(/^(\d+):(\d{1,2})$/);
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
+  const seconds = text.match(/^(\d+(?:\.\d+)?)s$/);
+  return seconds ? Number(seconds[1]) : null;
+}
+const defaultViewsMain = resamplePoints([
   155, 152, 148, 142, 135, 128, 120, 112, 104, 96, 86, 76, 65, 52, 38, 25,
-];
-const defaultViewsTypical = [
+]);
+const defaultViewsTypical = resamplePoints([
   155, 150, 145, 140, 133, 126, 120, 113, 106, 100, 93, 86, 80, 73, 65, 55,
-];
-const defaultWatch = [
+]);
+const defaultWatch = resamplePoints([
   15, 20, 26, 33, 41, 50, 58, 66, 74, 82, 90, 100, 110, 118, 126, 132,
-];
-const defaultLikes = [
+]);
+const defaultLikes = resamplePoints([
   125, 115, 105, 95, 88, 82, 78, 72, 68, 60, 55, 48, 42, 38, 32, 28,
-];
+]);
 
 type ViewsTemplate = {
   id: string;
@@ -69,7 +95,7 @@ const LIKES_PRESET_TEMPLATES: WatchTemplate[] = [
   { id: "likes-223-tail", name: "Long tail · 2:23", points: [58, 96, 116, 126, 122, 130, 125, 130, 127, 130, 126, 129, 125, 130, 127, 130, 126, 130, 125, 130, 128, 130, 126, 130, 82, 130, 127, 130, 118, 130, 128, 86], visibleUntil: -1, xEnd: "2:23", yTop: "20%", yMid: "10%" },
 ];
 
-async function watchPatternFromImage(file: File, pointCount = 16): Promise<WatchTemplate> {
+async function watchPatternFromImage(file: File, pointCount = GRAPH_POINT_COUNT): Promise<WatchTemplate> {
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement("canvas");
   const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
@@ -216,8 +242,8 @@ async function graphPatternFromImage(file: File): Promise<ViewsTemplate> {
 
   const greyMaxX = Math.max(...graphGrey.map((point) => point.x));
   const sampleRawLine = (points: Array<{ x: number; y: number }>) =>
-    Array.from({ length: 16 }, (_, index) => {
-      const targetX = graphMinX + ((graphMaxX - graphMinX) * index) / 15;
+    Array.from({ length: GRAPH_POINT_COUNT }, (_, index) => {
+      const targetX = graphMinX + ((graphMaxX - graphMinX) * index) / (GRAPH_POINT_COUNT - 1);
       const windowSize = Math.max(5, (graphMaxX - graphMinX) / 36);
       let candidates = points.filter((point) => Math.abs(point.x - targetX) <= windowSize);
       if (!candidates.length) {
@@ -235,8 +261,8 @@ async function graphPatternFromImage(file: File): Promise<ViewsTemplate> {
     const dominantRow = [...rowCounts.entries()].sort((a, b) => b[1] - a[1])[0];
     const hasHorizontalStroke = Boolean(dominantRow && dominantRow[1] >= Math.max(18, (graphMaxX - graphMinX) / 28));
     let previousY = hasHorizontalStroke ? dominantRow[0] : maxY;
-    return Array.from({ length: 16 }, (_, index) => {
-      const targetX = graphMinX + ((graphMaxX - graphMinX) * index) / 15;
+    return Array.from({ length: GRAPH_POINT_COUNT }, (_, index) => {
+      const targetX = graphMinX + ((graphMaxX - graphMinX) * index) / (GRAPH_POINT_COUNT - 1);
       const windowSize = Math.max(6, (graphMaxX - graphMinX) / 30);
       const candidates = graphGrey.filter((point) => Math.abs(point.x - targetX) <= windowSize);
       if (!candidates.length) return previousY;
@@ -259,8 +285,8 @@ async function graphPatternFromImage(file: File): Promise<ViewsTemplate> {
     Math.max(5, Math.min(155, 5 + ((point - plotTop) / Math.max(1, plotBottom - plotTop)) * 150)),
   );
   const visibleUntil = (lineMaxX: number) => {
-    const index = Math.round(((lineMaxX - graphMinX) / Math.max(1, graphMaxX - graphMinX)) * 15);
-    return index >= 15 ? -1 : Math.max(1, index);
+    const index = Math.round(((lineMaxX - graphMinX) / Math.max(1, graphMaxX - graphMinX)) * (GRAPH_POINT_COUNT - 1));
+    return index >= GRAPH_POINT_COUNT - 1 ? -1 : Math.max(1, index);
   };
   return {
     id: `uploaded-${Date.now()}`,
@@ -395,6 +421,75 @@ function randomUnitedStatesAudience() {
   return `${(40.1 + Math.random() * 14.9).toFixed(1)}%`;
 }
 
+function randomAgeAudience() {
+  const dominantTenths = 400 + Math.floor(Math.random() * 101);
+  const remainingTenths = 1000 - dominantTenths;
+  const weights = Array.from({ length: 5 }, () => 0.25 + Math.random());
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const exactShares = weights.map((weight) => (weight / totalWeight) * remainingTenths);
+  const shares = exactShares.map(Math.floor);
+  let leftover = remainingTenths - shares.reduce((sum, value) => sum + value, 0);
+  exactShares
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction)
+    .forEach(({ index }) => {
+      if (leftover > 0) { shares[index] += 1; leftover -= 1; }
+    });
+  const percentage = (tenths: number) => `${(tenths / 10).toFixed(1)}%`;
+  return {
+    a1: percentage(shares[0]), a2: percentage(shares[1]),
+    a3: percentage(dominantTenths), a4: percentage(shares[2]),
+    a5: percentage(shares[3]), a6: percentage(shares[4]),
+  };
+}
+
+const COUNTRY_AUDIENCE_POOL = [
+  "United Kingdom", "Canada", "Australia", "Philippines", "France",
+  "Switzerland", "Norway", "Ireland", "Netherlands", "New Zealand",
+];
+
+function distributeTenths(total: number, weights: number[]) {
+  const safeWeights = weights.some((weight) => weight > 0)
+    ? weights.map((weight) => Math.max(0, weight))
+    : weights.map(() => 1);
+  const weightTotal = safeWeights.reduce((sum, weight) => sum + weight, 0);
+  const exact = safeWeights.map((weight) => (weight / weightTotal) * total);
+  const result = exact.map(Math.floor);
+  let leftover = total - result.reduce((sum, value) => sum + value, 0);
+  exact
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction)
+    .forEach(({ index }) => {
+      if (leftover > 0) { result[index] += 1; leftover -= 1; }
+    });
+  return result;
+}
+
+function randomCountryAudience() {
+  const countries = [...COUNTRY_AUDIENCE_POOL];
+  for (let index = countries.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [countries[index], countries[swapIndex]] = [countries[swapIndex], countries[index]];
+  }
+  const unitedStatesTenths = 400 + Math.floor(Math.random() * 151);
+  const shares = distributeTenths(
+    1000 - unitedStatesTenths,
+    Array.from({ length: 4 }, () => 0.25 + Math.random()),
+  );
+  const rankedCountries = countries
+    .slice(0, 4)
+    .map((name, index) => ({ name, tenths: shares[index] }))
+    .sort((a, b) => b.tenths - a.tenths);
+  const percentage = (tenths: number) => `${(tenths / 10).toFixed(1)}%`;
+  return {
+    c1Name: "United States", c1Val: percentage(unitedStatesTenths),
+    c2Name: rankedCountries[0].name, c2Val: percentage(rankedCountries[0].tenths),
+    c3Name: rankedCountries[1].name, c3Val: percentage(rankedCountries[1].tenths),
+    c4Name: rankedCountries[2].name, c4Val: percentage(rankedCountries[2].tenths),
+    c5Name: rankedCountries[3].name, c5Val: percentage(rankedCountries[3].tenths),
+  };
+}
+
 let lamaSessionPromise: Promise<import("onnxruntime-web").InferenceSession> | null = null;
 
 async function getLamaSession() {
@@ -486,7 +581,28 @@ function useLocalData() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setData({ ...defaultData, ...JSON.parse(raw) });
+      if (raw) {
+        const stored = JSON.parse(raw) as Partial<DataShape>;
+        const viewsMain = stored.viewsMain ?? defaultViewsMain;
+        const viewsTypical = stored.viewsTypical ?? defaultViewsTypical;
+        const watch = stored.watch ?? defaultWatch;
+        const likesOverTime = stored.likesOverTime ?? defaultLikes;
+        setData({
+          ...defaultData,
+          ...stored,
+          ...(stored.viewsX2 && parseGraphDuration(stored.viewsX2) !== null
+            ? { viewsX0: defaultData.viewsX0, viewsX1: defaultData.viewsX1, viewsX2: defaultData.viewsX2 }
+            : {}),
+          viewsMain: resamplePoints(viewsMain),
+          viewsTypical: resamplePoints(viewsTypical),
+          watch: resamplePoints(watch),
+          likesOverTime: resamplePoints(likesOverTime),
+          viewsMainVisibleUntil: remapVisibleUntil(stored.viewsMainVisibleUntil ?? -1, viewsMain.length),
+          viewsTypicalVisibleUntil: remapVisibleUntil(stored.viewsTypicalVisibleUntil ?? -1, viewsTypical.length),
+          watchVisibleUntil: remapVisibleUntil(stored.watchVisibleUntil ?? -1, watch.length),
+          likesVisibleUntil: remapVisibleUntil(stored.likesVisibleUntil ?? -1, likesOverTime.length),
+        });
+      }
     } catch {}
   }, []);
 
@@ -615,6 +731,7 @@ function ReelInsightsPage() {
   >("All");
   const [savedToast, setSavedToast] = useState(false);
   const [editing, setEditing] = useState(true);
+  const [viewsEditableLine, setViewsEditableLine] = useState<"main" | "typical">("main");
   const [thumb, setThumb] = useState<string>(reelThumb);
   const [chartThumb, setChartThumb] = useState<string>(reelThumb);
   const [importedThumb, setImportedThumb] = useState("");
@@ -790,17 +907,29 @@ function ReelInsightsPage() {
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 1400);
   };
+  const syncedDurationFields = (endLabel: string) => {
+    return {
+      watchX1: endLabel,
+      likesX1: endLabel,
+    };
+  };
+  const setSyncedGraphDuration = (endLabel: string) =>
+    save({ ...data, ...syncedDurationFields(endLabel) });
+  const setSyncedGraphStart = (startLabel: string) =>
+    save({ ...data, watchX0: startLabel, likesX0: startLabel });
   const persistViewsTemplates = (templates: ViewsTemplate[]) => {
     setSavedViewsTemplates(templates);
     try { localStorage.setItem(VIEWS_TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
   };
   const applyViewsTemplate = (template: ViewsTemplate) => {
+    const main = resamplePoints(template.main);
+    const typical = resamplePoints(template.typical);
     save({
       ...data,
-      viewsMain: template.main.slice(),
-      viewsTypical: template.typical.slice(),
-      viewsMainVisibleUntil: template.mainVisibleUntil,
-      viewsTypicalVisibleUntil: template.typicalVisibleUntil,
+      viewsMain: main,
+      viewsTypical: typical,
+      viewsMainVisibleUntil: remapVisibleUntil(template.mainVisibleUntil, template.main.length),
+      viewsTypicalVisibleUntil: remapVisibleUntil(template.typicalVisibleUntil, template.typical.length),
     });
     setEditing(true);
     setIsViewsTemplateOpen(false);
@@ -829,7 +958,12 @@ function ReelInsightsPage() {
     try { localStorage.setItem(WATCH_TEMPLATES_KEY, JSON.stringify(templates)); } catch {}
   };
   const applyWatchTemplate = (template: WatchTemplate) => {
-    save({ ...data, watch: template.points.slice(), watchVisibleUntil: template.visibleUntil, watchX1: template.xEnd });
+    save({
+      ...data,
+      watch: resamplePoints(template.points),
+      watchVisibleUntil: remapVisibleUntil(template.visibleUntil, template.points.length),
+      ...syncedDurationFields(template.xEnd),
+    });
     setEditing(true);
     setIsWatchTemplateOpen(false);
   };
@@ -852,8 +986,11 @@ function ReelInsightsPage() {
   };
   const applyLikesTemplate = (template: WatchTemplate) => {
     save({
-      ...data, likesOverTime: template.points.slice(), likesVisibleUntil: template.visibleUntil,
-      likesX1: template.xEnd, likesYTop: template.yTop ?? data.likesYTop, likesYMid: template.yMid ?? data.likesYMid,
+      ...data,
+      likesOverTime: resamplePoints(template.points),
+      likesVisibleUntil: remapVisibleUntil(template.visibleUntil, template.points.length),
+      ...syncedDurationFields(template.xEnd),
+      likesYTop: template.yTop ?? data.likesYTop, likesYMid: template.yMid ?? data.likesYMid,
     });
     setEditing(true); setIsLikesTemplateOpen(false);
   };
@@ -865,7 +1002,7 @@ function ReelInsightsPage() {
   const deleteLikesTemplate = (templateId: string) =>
     persistLikesTemplates(savedLikesTemplates.filter((template) => template.id !== templateId));
   const uploadLikesTemplate = async (file: File) => {
-    const traced = await watchPatternFromImage(file, 32);
+    const traced = await watchPatternFromImage(file, GRAPH_POINT_COUNT);
     const template = { ...traced, id: `likes-uploaded-${Date.now()}`, xEnd: data.likesX1, yTop: data.likesYTop, yMid: data.likesYMid };
     persistLikesTemplates([...savedLikesTemplates, template]); applyLikesTemplate(template);
   };
@@ -877,6 +1014,41 @@ function ReelInsightsPage() {
     const percentage = parsePct(value);
     const opposite = Math.round((100 - percentage) * 10) / 10;
     save({ ...data, [key]: value, [oppositeKey]: `${opposite}%` });
+  };
+  const rebalanceCountryPercentages = (
+    changedKey: "c1Val" | "c2Val" | "c3Val" | "c4Val" | "c5Val",
+    value: string,
+  ) => {
+    const keys = ["c1Val", "c2Val", "c3Val", "c4Val", "c5Val"] as const;
+    const changedTenths = Math.round(Math.min(100, Math.max(0, parsePct(value))) * 10);
+    const otherKeys = keys.filter((key) => key !== changedKey);
+    const shares = distributeTenths(
+      1000 - changedTenths,
+      otherKeys.map((key) => parsePct(data[key])),
+    );
+    const tenthsByKey = Object.fromEntries([
+      [changedKey, changedTenths],
+      ...otherKeys.map((key, index) => [key, shares[index]]),
+    ]) as Record<(typeof keys)[number], number>;
+    const rankedCountries = ([2, 3, 4, 5] as const)
+      .map((row) => ({
+        name: data[`c${row}Name`],
+        tenths: tenthsByKey[`c${row}Val`],
+      }))
+      .sort((a, b) => b.tenths - a.tenths);
+    const updates: Partial<DataShape> = {
+      c1Val: `${(tenthsByKey.c1Val / 10).toFixed(1)}%`,
+    };
+    const rankedKeys = [
+      ["c2Name", "c2Val"], ["c3Name", "c3Val"],
+      ["c4Name", "c4Val"], ["c5Name", "c5Val"],
+    ] as const;
+    rankedCountries.forEach((country, index) => {
+      const [nameKey, valueKey] = rankedKeys[index];
+      updates[nameKey] = country.name;
+      updates[valueKey] = `${(country.tenths / 10).toFixed(1)}%`;
+    });
+    save({ ...data, ...updates });
   };
   const openImport = () => {
     setImportError("");
@@ -895,8 +1067,7 @@ function ReelInsightsPage() {
       setEditing(true);
       const count = (value: number | null) =>
         value === null ? undefined : new Intl.NumberFormat("en-US").format(value);
-      const duration = (seconds: number | null) =>
-        seconds === null ? undefined : `${Math.round(seconds)}s`;
+      const durationLabel = imported.duration === null ? undefined : formatGraphDuration(imported.duration);
       const applyCount = (key: string, value: number | null) =>
         value === null ? {} : { [key]: count(value)! };
       const next = {
@@ -907,7 +1078,10 @@ function ReelInsightsPage() {
         ...applyCount("reposts", imported.reposts), ...applyCount("eReposts", imported.reposts),
         ...applyCount("shares", imported.shares), ...applyCount("eShares", imported.shares),
         ...applyCount("saves", imported.saves), ...applyCount("eSaves", imported.saves),
-        ...(duration(imported.duration) ? { watchX1: duration(imported.duration)!, likesX1: duration(imported.duration)! } : {}),
+        ...(durationLabel ? {
+          watchX0: "0:00", watchX1: durationLabel,
+          likesX0: "0:00", likesX1: durationLabel,
+        } : {}),
       };
       save(imported.views === null ? next : syncViewsYAxis(next, count(imported.views)!));
       if (imported.thumbnail) {
@@ -1125,31 +1299,40 @@ function ReelInsightsPage() {
                   onMainVisibleUntil={(value) => set("viewsMainVisibleUntil", value)}
                   onTypicalVisibleUntil={(value) => set("viewsTypicalVisibleUntil", value)}
                   showHandles={editing}
+                  editableLine={viewsEditableLine}
                   yTop={data.chartMax}
                   yMid={data.chartMid}
                   onYTop={(value) => save({ ...data, chartMax: value, chartYAxisAuto: false })}
                   onYMid={(value) => save({ ...data, chartMid: value, chartYAxisAuto: false })}
                   xLabelsData={[data.viewsX0, data.viewsX1, data.viewsX2]}
                   onXLabel={(index, value) =>
-                    set(
-                      (["viewsX0", "viewsX1", "viewsX2"] as const)[index],
-                      value,
-                    )
-                  }
+                    set((["viewsX0", "viewsX1", "viewsX2"] as const)[index], value)}
                   onTemplateRequest={() => setIsViewsTemplateOpen(true)}
                 />
                 <div className="mt-3 flex items-center gap-4 text-[12px] text-white/80">
-                  <span className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    disabled={!editing}
+                    onClick={() => setViewsEditableLine("main")}
+                    aria-pressed={editing && viewsEditableLine === "main"}
+                    className={"flex items-center gap-1.5 rounded-md px-1 py-0.5 disabled:cursor-default " + (editing && viewsEditableLine !== "main" ? "opacity-45" : "")}
+                  >
                     <span
                       className="h-2 w-2 rounded-full"
                       style={{ background: "#eb22d4" }}
                     />
                     This reel
-                  </span>
-                  <span className="flex items-center gap-1.5">
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!editing}
+                    onClick={() => setViewsEditableLine("typical")}
+                    aria-pressed={editing && viewsEditableLine === "typical"}
+                    className={"flex items-center gap-1.5 rounded-md px-1 py-0.5 disabled:cursor-default " + (editing && viewsEditableLine !== "typical" ? "opacity-45" : "")}
+                  >
                     <span className="h-2 w-2 rounded-full bg-white/40" />
                     Your typical reel
-                  </span>
+                  </button>
                 </div>
               </div>
               <div className="mt-6">
@@ -1252,9 +1435,9 @@ function ReelInsightsPage() {
                   onYTop={(value) => set("watchYTop", value)}
                   onYMid={(value) => set("watchYMid", value)}
                   xLabelsData={[data.watchX0, data.watchX1]}
-                  onXLabel={(index, value) =>
-                    set((["watchX0", "watchX1"] as const)[index], value)
-                  }
+                  onXLabel={(index, value) => index === 1
+                    ? setSyncedGraphDuration(value)
+                    : setSyncedGraphStart(value)}
                   onTemplateRequest={() => setIsWatchTemplateOpen(true)}
                 />
               </MediaChart>
@@ -1370,9 +1553,9 @@ function ReelInsightsPage() {
                   onYTop={(value) => set("likesYTop", value)}
                   onYMid={(value) => set("likesYMid", value)}
                   xLabelsData={[data.likesX0, data.likesX1]}
-                  onXLabel={(index, value) =>
-                    set((["likesX0", "likesX1"] as const)[index], value)
-                  }
+                  onXLabel={(index, value) => index === 1
+                    ? setSyncedGraphDuration(value)
+                    : setSyncedGraphStart(value)}
                   onTemplateRequest={() => setIsLikesTemplateOpen(true)}
                 />
               </MediaChart>
@@ -1398,12 +1581,37 @@ function ReelInsightsPage() {
                 />
               </div>
               <div className="mt-6">
-                <SectionTitle onDoubleClick={() => set("c1Val", randomUnitedStatesAudience())}>Audience details</SectionTitle>
+                <SectionTitle onDoubleClick={() => {
+                  if (audTab === "Age") {
+                    setEditing(true);
+                    save({ ...data, ...randomAgeAudience() });
+                  }
+                  if (audTab === "Country") {
+                    setEditing(true);
+                    save({ ...data, ...randomCountryAudience() });
+                  }
+                }}>Audience details</SectionTitle>
                 <div className="mt-3 flex gap-2">
                   {(["Age", "Country", "Gender"] as AudTab[]).map((item) => (
                     <button
                       key={item}
                       onClick={() => setAudTab(item)}
+                      onDoubleClick={() => {
+                        if (item === "Age") {
+                          setAudTab("Age");
+                          setEditing(true);
+                          save({ ...data, ...randomAgeAudience() });
+                        } else if (item === "Country") {
+                          setAudTab("Country");
+                          setEditing(true);
+                          save({ ...data, ...randomCountryAudience() });
+                        }
+                      }}
+                      title={item === "Age"
+                        ? "Double-click to generate age percentages"
+                        : item === "Country"
+                          ? "Double-click to generate countries and percentages"
+                          : undefined}
                       className={
                         "rounded-full border px-4 py-1.5 text-[13px] font-medium " +
                         (audTab === item
@@ -1421,31 +1629,31 @@ function ReelInsightsPage() {
                       name={data.c1Name}
                       val={data.c1Val}
                       onName={(value) => set("c1Name", value)}
-                      onVal={(value) => set("c1Val", value)}
+                      onVal={(value) => rebalanceCountryPercentages("c1Val", value)}
                     />
                     <CountryRow
                       name={data.c2Name}
                       val={data.c2Val}
                       onName={(value) => set("c2Name", value)}
-                      onVal={(value) => set("c2Val", value)}
+                      onVal={(value) => rebalanceCountryPercentages("c2Val", value)}
                     />
                     <CountryRow
                       name={data.c3Name}
                       val={data.c3Val}
                       onName={(value) => set("c3Name", value)}
-                      onVal={(value) => set("c3Val", value)}
+                      onVal={(value) => rebalanceCountryPercentages("c3Val", value)}
                     />
                     <CountryRow
                       name={data.c4Name}
                       val={data.c4Val}
                       onName={(value) => set("c4Name", value)}
-                      onVal={(value) => set("c4Val", value)}
+                      onVal={(value) => rebalanceCountryPercentages("c4Val", value)}
                     />
                     <CountryRow
                       name={data.c5Name}
                       val={data.c5Val}
                       onName={(value) => set("c5Name", value)}
-                      onVal={(value) => set("c5Val", value)}
+                      onVal={(value) => rebalanceCountryPercentages("c5Val", value)}
                     />
                   </div>
                 )}
@@ -2043,6 +2251,7 @@ function EditableLineChart({
   onXLabel,
   onTemplateRequest,
   showHandles = true,
+  editableLine = "main",
 }: {
   main: number[];
   typical: number[];
@@ -2060,6 +2269,7 @@ function EditableLineChart({
   onXLabel: (index: number, value: string) => void;
   onTemplateRequest: () => void;
   showHandles?: boolean;
+  editableLine?: "main" | "typical";
 }) {
   const width = 320,
     height = 160;
@@ -2184,7 +2394,7 @@ function EditableLineChart({
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {showHandles &&
+        {showHandles && editableLine === "typical" &&
           displayedTypical.map((y, index) => (
             <circle
               key={index}
@@ -2206,7 +2416,7 @@ function EditableLineChart({
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {showHandles &&
+        {showHandles && editableLine === "main" &&
           displayedMain.map((y, index) => (
             <circle
               key={index}
