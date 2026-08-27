@@ -1473,7 +1473,7 @@ function ReelInsightsPage() {
                       <IgIcon
                         src={ic2Timer}
                         alt="Skip"
-                        className="h-[23px] w-[23px]"
+                        className="h-[24px] w-[24px]"
                       />
                     }
                     label="Skip rate"
@@ -1485,7 +1485,7 @@ function ReelInsightsPage() {
                       <IgIcon
                         src={ic2Share}
                         alt="Share"
-                        className="h-[23px] w-[23px]"
+                        className="h-[24px] w-[24px]"
                       />
                     }
                     label="Share rate"
@@ -1497,7 +1497,7 @@ function ReelInsightsPage() {
                       <IgIcon
                         src={ic2Heart}
                         alt="Like"
-                        className="h-[23px] w-[23px]"
+                        className="h-[24px] w-[24px]"
                       />
                     }
                     label="Like rate"
@@ -1509,7 +1509,7 @@ function ReelInsightsPage() {
                       <IgIcon
                         src={ic2Bookmark}
                         alt="Save"
-                        className="h-[23px] w-[23px]"
+                        className="h-[24px] w-[24px]"
                       />
                     }
                     label="Save rate"
@@ -1521,7 +1521,7 @@ function ReelInsightsPage() {
                       <IgIcon
                         src={ic2Repost}
                         alt="Repost"
-                        className="h-[23px] w-[23px]"
+                        className="h-[24px] w-[24px]"
                       />
                     }
                     label="Repost rate"
@@ -1533,7 +1533,7 @@ function ReelInsightsPage() {
                       <IgIcon
                         src={ic2Comment}
                         alt="Comment"
-                        className="h-[23px] w-[23px]"
+                        className="h-[24px] w-[24px]"
                       />
                     }
                     label="Comment rate"
