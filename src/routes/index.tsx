@@ -34,6 +34,7 @@ const WATCH_TEMPLATES_KEY = "reel-insights-watch-templates-v1";
 const LIKES_TEMPLATES_KEY = "reel-insights-likes-templates-v1";
 const TOP_GAP_KEY = "reel-insights-top-gap-v1";
 const AGE_EDITED_KEYS_KEY = "reel-insights-age-edited-keys-v1";
+const LAYOUTS_KEY = "reel-insights-layouts-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
 const GRAPH_POINT_COUNT = 32;
 function resamplePoints(points: number[], count = GRAPH_POINT_COUNT) {
@@ -380,6 +381,16 @@ const defaultData = {
 };
 
 type DataShape = typeof defaultData;
+type SavedLayout = {
+  id: string;
+  name: string;
+  data: DataShape;
+  thumb: string;
+  chartThumb: string;
+  importedThumb: string;
+  topGap: boolean;
+  editedAgeKeys: Array<"a1" | "a2" | "a3" | "a4" | "a5" | "a6">;
+};
 type Tab = "Overview" | "Engagement" | "Audience";
 type AudTab = "Age" | "Country" | "Gender";
 type AccessState = "checking" | "allowed" | "activation-required";
@@ -772,6 +783,9 @@ function ReelInsightsPage() {
   const [isTrendMenuOpen, setIsTrendMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [topGap, setTopGap] = useState(false);
+  const [isLayoutsOpen, setIsLayoutsOpen] = useState(false);
+  const [savedLayouts, setSavedLayouts] = useState<SavedLayout[]>([]);
+  const [layoutError, setLayoutError] = useState("");
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [reelUrl, setReelUrl] = useState("");
   const [importError, setImportError] = useState("");
@@ -804,6 +818,12 @@ function ReelInsightsPage() {
 
   useEffect(() => {
     try { setTopGap(localStorage.getItem(TOP_GAP_KEY) === "on"); } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      setSavedLayouts(JSON.parse(localStorage.getItem(LAYOUTS_KEY) ?? "[]") as SavedLayout[]);
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -1146,6 +1166,45 @@ function ReelInsightsPage() {
       return next;
     });
   };
+  const persistLayouts = (layouts: SavedLayout[]) => {
+    try {
+      localStorage.setItem(LAYOUTS_KEY, JSON.stringify(layouts));
+      setSavedLayouts(layouts);
+      setLayoutError("");
+    } catch {
+      setLayoutError("Could not save the layout because browser storage is full.");
+    }
+  };
+  const saveCurrentLayout = () => {
+    const layout: SavedLayout = {
+      id: crypto.randomUUID(),
+      name: `Layout ${savedLayouts.length + 1}`,
+      data: structuredClone(data),
+      thumb,
+      chartThumb,
+      importedThumb,
+      topGap,
+      editedAgeKeys: [...editedAgeKeysRef.current],
+    };
+    persistLayouts([...savedLayouts, layout]);
+  };
+  const applyLayout = (layout: SavedLayout) => {
+    save(layout.data);
+    setThumb(layout.thumb);
+    setChartThumb(layout.chartThumb);
+    setImportedThumb(layout.importedThumb);
+    setTopGap(layout.topGap);
+    editedAgeKeysRef.current = new Set(layout.editedAgeKeys);
+    try {
+      localStorage.setItem("reel-insights-thumb", layout.thumb);
+      localStorage.setItem("reel-insights-chart-thumb", layout.chartThumb);
+      localStorage.setItem("reel-insights-imported-thumb-url", layout.importedThumb);
+      localStorage.setItem(TOP_GAP_KEY, layout.topGap ? "on" : "off");
+      localStorage.setItem(AGE_EDITED_KEYS_KEY, JSON.stringify(layout.editedAgeKeys));
+    } catch {}
+    setEditing(true);
+    setIsLayoutsOpen(false);
+  };
   const handleImport = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const importSequence = ++importSequenceRef.current;
@@ -1283,6 +1342,16 @@ function ReelInsightsPage() {
                   <span className={"relative h-5 w-9 rounded-full transition-colors " + (topGap ? "bg-[#eb22d4]" : "bg-white/20")}>
                     <span className={"absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform " + (topGap ? "translate-x-[18px]" : "translate-x-0.5")} />
                   </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsMoreMenuOpen(false);
+                    setIsLayoutsOpen(true);
+                  }}
+                  className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10"
+                >
+                  Layouts
                 </button>
               </div>
             )}
@@ -1900,6 +1969,27 @@ function ReelInsightsPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+      {isLayoutsOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="layouts-title">
+          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-zinc-950 p-5 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <h2 id="layouts-title" className="text-lg font-semibold text-white">Layouts</h2>
+              <button type="button" onClick={() => setIsLayoutsOpen(false)} className="rounded-lg px-3 py-2 text-sm text-white">Close</button>
+            </div>
+            <button type="button" onClick={saveCurrentLayout} className="mt-4 w-full rounded-xl bg-[#eb22d4] px-4 py-3 text-sm font-semibold text-white">Save current layout</button>
+            {layoutError && <p className="mt-3 text-sm text-red-300">{layoutError}</p>}
+            <div className="mt-4 max-h-72 space-y-2 overflow-y-auto">
+              {savedLayouts.length === 0 && <p className="text-sm text-white/60">No saved layouts yet.</p>}
+              {savedLayouts.map((layout) => (
+                <div key={layout.id} className="flex items-center gap-2 rounded-xl border border-white/15 p-2">
+                  <button type="button" onClick={() => applyLayout(layout)} className="min-w-0 flex-1 rounded-lg px-2 py-2 text-left text-sm font-medium text-white hover:bg-white/10">{layout.name}</button>
+                  <button type="button" onClick={() => persistLayouts(savedLayouts.filter((item) => item.id !== layout.id))} className="rounded-lg px-3 py-2 text-sm text-red-300 hover:bg-white/10" aria-label={`Delete ${layout.name}`}>Delete</button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
       {isViewsTemplateOpen && (
