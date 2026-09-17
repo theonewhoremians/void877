@@ -1668,13 +1668,6 @@ function ReelInsightsPage() {
                     onVal={(value) => set("src4Val", value)}
                     color={IG_PINK}
                   />
-                  <CountryRow
-                    name={data.src5Name}
-                    val={data.src5Val}
-                    onName={(value) => set("src5Name", value)}
-                    onVal={(value) => set("src5Val", value)}
-                    color={IG_PINK}
-                  />
                 </div>
               </div>
               <div className="mt-6">
