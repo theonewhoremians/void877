@@ -2294,7 +2294,7 @@ function BarRow({
   return (
     <div>
       <div className="text-[14px] text-white">{label}</div>
-      <div className="mt-2 flex items-center gap-3">
+      <div className="mt-1.5 flex items-center gap-3">
         <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full"
@@ -2331,7 +2331,7 @@ function CountryRow({
         onChange={onName}
         className="text-[15px] text-white"
       />
-      <div className="mt-2 flex items-center gap-3">
+      <div className="mt-1.5 flex items-center gap-3">
         <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full"
