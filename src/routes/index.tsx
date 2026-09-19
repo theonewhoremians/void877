@@ -317,11 +317,17 @@ const defaultData = {
   chartMid: "37K",
   chartYAxisAuto: true,
   skipRate: "12.7%",
+  skipStatus: "LowerGreen" as ImpactStatus,
   shareRate: "0.3%",
+  shareStatus: "Higher" as ImpactStatus,
   likeRate: "1.0%",
+  likeStatus: "Higher" as ImpactStatus,
   saveRate: "0.2%",
+  saveStatus: "LowerGreen" as ImpactStatus,
   repostRate: "0.1%",
+  repostStatus: "LowerGreen" as ImpactStatus,
   commentRate: "0.1%",
+  commentStatus: "Typical" as ImpactStatus,
   eFollows: "18",
   eProfileVisits: "129",
   eLikes: "739",
@@ -381,6 +387,7 @@ const defaultData = {
 };
 
 type DataShape = typeof defaultData;
+type ImpactStatus = "Higher" | "Lower" | "LowerGreen" | "Typical";
 type SavedLayout = {
   id: string;
   name: string;
@@ -1189,7 +1196,7 @@ function ReelInsightsPage() {
     persistLayouts([...savedLayouts, layout]);
   };
   const applyLayout = (layout: SavedLayout) => {
-    save(layout.data);
+    save({ ...defaultData, ...layout.data });
     setThumb(layout.thumb);
     setChartThumb(layout.chartThumb);
     setImportedThumb(layout.importedThumb);
@@ -1470,7 +1477,7 @@ function ReelInsightsPage() {
                         className={
                           "rounded-full border px-4 py-1.5 text-[13px] font-medium " +
                           (viewsTab === item
-                            ? "border-white bg-white text-black"
+                            ? "border-[#2B3036] bg-[#2B3036] text-white"
                             : "border-white/20 bg-transparent text-white/75")
                         }
                       >
@@ -1548,6 +1555,8 @@ function ReelInsightsPage() {
                     label="Skip rate"
                     value={data.skipRate}
                     onChange={(value) => set("skipRate", value)}
+                    status={data.skipStatus}
+                    onStatusChange={(value) => set("skipStatus", value)}
                   />
                   <ImpactRow
                     icon={
@@ -1560,6 +1569,8 @@ function ReelInsightsPage() {
                     label="Share rate"
                     value={data.shareRate}
                     onChange={(value) => set("shareRate", value)}
+                    status={data.shareStatus}
+                    onStatusChange={(value) => set("shareStatus", value)}
                   />
                   <ImpactRow
                     icon={
@@ -1572,6 +1583,8 @@ function ReelInsightsPage() {
                     label="Like rate"
                     value={data.likeRate}
                     onChange={(value) => set("likeRate", value)}
+                    status={data.likeStatus}
+                    onStatusChange={(value) => set("likeStatus", value)}
                   />
                   <ImpactRow
                     icon={
@@ -1584,6 +1597,8 @@ function ReelInsightsPage() {
                     label="Save rate"
                     value={data.saveRate}
                     onChange={(value) => set("saveRate", value)}
+                    status={data.saveStatus}
+                    onStatusChange={(value) => set("saveStatus", value)}
                   />
                   <ImpactRow
                     icon={
@@ -1596,6 +1611,8 @@ function ReelInsightsPage() {
                     label="Repost rate"
                     value={data.repostRate}
                     onChange={(value) => set("repostRate", value)}
+                    status={data.repostStatus}
+                    onStatusChange={(value) => set("repostStatus", value)}
                   />
                   <ImpactRow
                     icon={
@@ -1608,6 +1625,8 @@ function ReelInsightsPage() {
                     label="Comment rate"
                     value={data.commentRate}
                     onChange={(value) => set("commentRate", value)}
+                    status={data.commentStatus}
+                    onStatusChange={(value) => set("commentStatus", value)}
                   />
                 </div>
               </div>
@@ -2232,11 +2251,15 @@ function ImpactRow({
   label,
   value,
   onChange,
+  status,
+  onStatusChange,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   onChange: (value: string) => void;
+  status: ImpactStatus;
+  onStatusChange: (value: ImpactStatus) => void;
 }) {
   return (
     <div className="flex items-center gap-3 py-3.5">
@@ -2244,11 +2267,26 @@ function ImpactRow({
         {icon}
       </div>
       <div className="flex-1 text-[15px]">{label}</div>
-      <Editable
-        value={value}
-        onChange={onChange}
-        className="text-[15px] font-semibold"
-      />
+      <div className="flex flex-col items-end">
+        <Editable
+          value={value}
+          onChange={onChange}
+          className="text-[15px] font-semibold"
+        />
+        <button
+          type="button"
+          onClick={() => onStatusChange(
+            status === "Higher" ? "Lower" :
+            status === "Lower" ? "LowerGreen" :
+            status === "LowerGreen" ? "Typical" : "Higher",
+          )}
+          className="text-[12px] leading-4"
+          style={{ color: status === "Higher" || status === "LowerGreen" ? "#167346" : "#AAADB4" }}
+          aria-label={`${label} status: ${status === "LowerGreen" ? "Lower" : status}. Click to change.`}
+        >
+          {status === "LowerGreen" ? "Lower" : status}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2294,7 +2332,7 @@ function BarRow({
   return (
     <div>
       <div className="text-[14px] text-white">{label}</div>
-      <div className="mt-1.5 flex items-center gap-3">
+      <div className="mt-[5px] flex items-center gap-3">
         <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full"
@@ -2331,7 +2369,7 @@ function CountryRow({
         onChange={onName}
         className="text-[15px] text-white"
       />
-      <div className="mt-1.5 flex items-center gap-3">
+      <div className="mt-[5px] flex items-center gap-3">
         <div className="h-[8px] flex-1 overflow-hidden rounded-full bg-white/10">
           <div
             className="h-full rounded-full"
