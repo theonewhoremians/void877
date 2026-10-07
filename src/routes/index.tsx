@@ -1294,14 +1294,14 @@ function ReelInsightsPage() {
           <button
             onClick={handleHeaderSave}
             onDoubleClick={() => setEditing(true)}
-            className="flex-1 text-left"
+            className="ml-6 flex-1 text-left"
             title="Click title to save · double-click to edit graphs"
           >
             <Editable
               as="h1"
               value={data.title}
               onChange={(value) => set("title", value)}
-              className="text-[22px] font-semibold tracking-tight"
+              className="text-[20px] font-semibold tracking-tight"
               ariaLabel="Page title"
             />
           </button>
@@ -1364,11 +1364,11 @@ function ReelInsightsPage() {
             )}
           </div>
         </header>
-        <div className="flex justify-center pt-4">
+        <div className="flex justify-center pt-5">
           <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="group relative h-[190px] w-[130px] overflow-hidden rounded-2xl shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]"
+              className="group relative aspect-square w-[min(62vw,244px)] overflow-hidden rounded-lg shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]"
               aria-label="Change thumbnail"
             >
               <img
@@ -1390,55 +1390,55 @@ function ReelInsightsPage() {
           />
           <input ref={chartFileRef} type="file" accept="image/*" className="hidden" onChange={onPickChartThumb} />
         </div>
-        <div className="mt-5 grid grid-cols-5 gap-2 px-6">
+        <div className="mt-7 grid grid-cols-5 gap-2 px-6">
           <StatIcon
-            icon={<IgHeart className="h-6 w-6" />}
+            icon={<IgHeart className="h-5 w-5" />}
             value={data.likes}
             onChange={(value) => set("likes", value)}
           />
           <StatIcon
-            icon={<IgComment className="h-6 w-6" />}
+            icon={<IgComment className="h-5 w-5" />}
             value={data.comments}
             onChange={(value) => set("comments", value)}
           />
           <StatIcon
-            icon={<IgRepost className="h-6 w-6" />}
+            icon={<IgRepost className="h-5 w-5" />}
             value={data.reposts}
             onChange={(value) => set("reposts", value)}
           />
           <StatIcon
-            icon={<IgShare className="h-6 w-6" />}
+            icon={<IgShare className="h-5 w-5" />}
             value={data.shares}
             onChange={(value) => set("shares", value)}
           />
           <StatIcon
-            icon={<IgBookmark className="h-6 w-6" />}
+            icon={<IgBookmark className="h-5 w-5" />}
             value={data.saves}
             onChange={(value) => set("saves", value)}
           />
         </div>
-        <div className="mt-5 grid grid-cols-3 border-b border-white/10 px-2">
+        <div className="mt-4 grid grid-cols-3 border-b border-white/10 px-2">
           {(["Overview", "Engagement", "Audience"] as Tab[]).map((item) => (
             <button
               key={item}
               onClick={() => setTab(item)}
               className={
-                "relative py-3 text-[15px] font-medium " +
+                "relative py-2.5 text-[15px] font-medium " +
                 (tab === item ? "text-zinc-100" : "text-white/45")
               }
             >
               {item}
               {tab === item && (
-                <span className="absolute bottom-[-1px] left-1/4 right-1/4 h-0.5 rounded-full bg-white" />
+                <span className="absolute bottom-[-1px] left-[20%] right-[20%] h-0.5 rounded-full bg-white" />
               )}
             </button>
           ))}
         </div>
-        <div className="px-4 pt-5">
+        <div className="px-4 pt-10">
           {tab === "Overview" && (
             <>
               <SectionTitle>Summary</SectionTitle>
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="mt-10 grid grid-cols-2 gap-x-3 gap-y-3.5">
                 <SummaryCard
                   label="Views"
                   value={data.views}
@@ -1461,7 +1461,7 @@ function ReelInsightsPage() {
                   onChange={(value) => set("follows", value)}
                 />
               </div>
-              <div className="mt-6">
+              <div className="mt-12">
                 <SectionTitle
                   onDoubleClick={() => setIsViewsTemplateOpen(true)}
                   actionTitle="Double-click to open graph templates"
@@ -1962,11 +1962,11 @@ function ReelInsightsPage() {
               <div className="mt-2 grid gap-2">
                 <label className="flex cursor-pointer gap-3 rounded-xl border border-white/15 p-3 text-sm text-white has-[:checked]:border-[#eb22d4] has-[:checked]:bg-[#eb22d4]/10">
                   <input type="radio" name="thumbnail-version" value="cleaned" checked={thumbnailImportMode === "cleaned"} onChange={() => setThumbnailImportMode("cleaned")} className="mt-0.5 accent-[#eb22d4]" />
-                  <span><span className="block font-medium">Cleaned thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Crop the wrapper and locally remove the centered play button.</span></span>
+                  <span><span className="block font-medium">Cleaned thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Display in the square cover frame and locally remove the centered play button.</span></span>
                 </label>
                 <label className="flex cursor-pointer gap-3 rounded-xl border border-white/15 p-3 text-sm text-white has-[:checked]:border-[#eb22d4] has-[:checked]:bg-[#eb22d4]/10">
                   <input type="radio" name="thumbnail-version" value="original" checked={thumbnailImportMode === "original"} onChange={() => setThumbnailImportMode("original")} className="mt-0.5 accent-[#eb22d4]" />
-                  <span><span className="block font-medium">Original thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Keep the public image exactly as imported, including its play button.</span></span>
+                  <span><span className="block font-medium">Original thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Display a square crop and keep the imported play button.</span></span>
                 </label>
               </div>
             </fieldset>
@@ -2227,7 +2227,7 @@ function SummaryCard({
   onLabelChange?: (value: string) => void;
 }) {
   return (
-    <div className="rounded-2xl bg-[#25282d] px-4 py-3.5">
+    <div className="rounded-xl bg-[#25282d] px-4 py-4">
       {onLabelChange ? (
         <Editable
           value={label}
@@ -2241,7 +2241,7 @@ function SummaryCard({
       <Editable
         value={value}
         onChange={onChange}
-        className="mt-1 block text-[22px] font-semibold tracking-tight text-white/90"
+        className="mt-1.5 block text-[20px] font-semibold tracking-tight text-white/90"
       />
     </div>
   );
@@ -2316,6 +2316,7 @@ function parsePct(value: string) {
 }
 const IG_PINK = "#eb22d4";
 const IG_PURPLE = "#7c3aea";
+const SF_PRO_FONT_STACK = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif";
 function BarRow({
   label,
   value,
@@ -2343,6 +2344,7 @@ function BarRow({
           value={value}
           onChange={onChange}
           className="w-14 text-right text-[14px] font-semibold"
+          style={{ fontFamily: SF_PRO_FONT_STACK }}
         />
       </div>
     </div>
@@ -2380,6 +2382,7 @@ function CountryRow({
           value={val}
           onChange={onVal}
           className="w-14 text-right text-[14px] font-semibold"
+          style={{ fontFamily: SF_PRO_FONT_STACK }}
         />
       </div>
     </div>
