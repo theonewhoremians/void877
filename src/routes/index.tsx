@@ -1658,7 +1658,7 @@ function ReelInsightsPage() {
               </MediaChart>
               <div className="mt-6">
                 <SectionTitle>Top sources of views</SectionTitle>
-                <div className="mt-4 space-y-4">
+                <div className="mt-12 space-y-4">
                   <CountryRow
                     name={data.src1Name}
                     val={data.src1Val}
