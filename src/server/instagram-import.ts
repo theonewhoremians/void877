@@ -109,18 +109,20 @@ function parsePublicHtml(html: string): Partial<InstagramReel> {
     ?? jsonNumber(html, "ig_reels_plays")
     ?? parseCount(description.match(/([\d.,]+\s*[KM]?)\s+(?:views?|plays?)/i)?.[1]);
   const reposts = jsonNumber(html, "repost_count")
-    ?? jsonNumber(html, "reshare_count")
+    ?? jsonNumber(html, "media_repost_count")
     ?? jsonNumber(html, "reposts_count")
     ?? jsonNumber(html, "reel_repost_count")
-    ?? jsonNumber(html, "reel_reshare_count")
     ?? parseCount(description.match(/([\d.,]+\s*[KM]?)\s+reposts?/i)?.[1]);
   const shares = jsonNumber(html, "share_count")
     ?? jsonNumber(html, "reshare_count")
     ?? jsonNumber(html, "shares_count")
+    ?? jsonNumber(html, "reel_reshare_count")
     ?? parseCount(description.match(/([\d.,]+\s*[KM]?)\s+shares?/i)?.[1]);
   const saves = jsonNumber(html, "save_count")
+    ?? jsonNumber(html, "media_save_count")
     ?? jsonNumber(html, "saved_count")
     ?? jsonNumber(html, "saves_count")
+    ?? jsonNumber(html, "bookmark_count")
     ?? parseCount(description.match(/([\d.,]+\s*[KM]?)\s+saves?/i)?.[1]);
   const hashtags = captionText ? [...captionText.matchAll(/#([\p{L}\p{N}_]+)/gu)].map((match) => match[1]) : [];
   const mentions = captionText ? [...captionText.matchAll(/@([a-z0-9._]+)/gi)].map((match) => match[1]) : [];
