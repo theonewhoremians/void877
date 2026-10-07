@@ -5,7 +5,6 @@ import {
   Info,
   MoreVertical,
   TrendingUp,
-  ChevronRight,
 } from "lucide-react";
 import reelThumb from "@/assets/reel-thumb.jpg";
 import icHeart from "@/assets/ig-icon/heart.png.png";
@@ -1692,16 +1691,6 @@ function ReelInsightsPage() {
                     color={IG_PINK}
                   />
                 </div>
-              </div>
-              <div className="mt-6">
-                <div className="mb-2 text-[14px] font-semibold text-white/90">
-                  Ad
-                </div>
-                <button className="flex w-full items-center gap-3 py-2 text-left">
-                  <TrendingUp className="h-5 w-5" strokeWidth={2} />
-                  <span className="flex-1 text-[15px]">Boost this reel</span>
-                  <ChevronRight className="h-5 w-5 text-white/60" />
-                </button>
               </div>
             </>
           )}
