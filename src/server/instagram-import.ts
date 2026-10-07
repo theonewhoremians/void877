@@ -133,7 +133,11 @@ function parsePublicHtml(html: string): Partial<InstagramReel> {
     caption: captionText,
     hashtags: [...new Set(hashtags)],
     mentions: [...new Set(mentions)],
-    thumbnail: meta(html, "og:image") ?? jsonString(html, "display_url") ?? null,
+    thumbnail: jsonString(html, "display_url")
+      ?? jsonString(html, "thumbnail_src")
+      ?? jsonString(html, "thumbnail_url")
+      ?? meta(html, "og:image")
+      ?? null,
     videoUrl: meta(html, "og:video") ?? jsonString(html, "video_url") ?? null,
     duration: jsonNumber(html, "video_duration"),
     width,

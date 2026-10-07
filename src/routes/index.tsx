@@ -35,8 +35,6 @@ const LIKES_TEMPLATES_KEY = "reel-insights-likes-templates-v1";
 const TOP_GAP_KEY = "reel-insights-top-gap-v1";
 const AGE_EDITED_KEYS_KEY = "reel-insights-age-edited-keys-v1";
 const LAYOUTS_KEY = "reel-insights-layouts-v1";
-const THUMB_PLAY_KEY = "reel-insights-thumb-play-v1";
-const CHART_THUMB_PLAY_KEY = "reel-insights-chart-thumb-play-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
 const GRAPH_POINT_COUNT = 32;
 function resamplePoints(points: number[], count = GRAPH_POINT_COUNT) {
@@ -397,8 +395,6 @@ type SavedLayout = {
   thumb: string;
   chartThumb: string;
   importedThumb: string;
-  thumbnailPlayOverlay: boolean;
-  chartThumbPlayOverlay: boolean;
   topGap: boolean;
   editedAgeKeys: Array<"a1" | "a2" | "a3" | "a4" | "a5" | "a6">;
 };
@@ -791,8 +787,6 @@ function ReelInsightsPage() {
   const [thumb, setThumb] = useState<string>(reelThumb);
   const [chartThumb, setChartThumb] = useState<string>(reelThumb);
   const [importedThumb, setImportedThumb] = useState("");
-  const [thumbnailPlayOverlay, setThumbnailPlayOverlay] = useState(false);
-  const [chartThumbPlayOverlay, setChartThumbPlayOverlay] = useState(false);
   const [isTrendMenuOpen, setIsTrendMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [topGap, setTopGap] = useState(false);
@@ -804,7 +798,7 @@ function ReelInsightsPage() {
   const [importError, setImportError] = useState("");
   const [importNotice, setImportNotice] = useState("");
   const [isImporting, setIsImporting] = useState(false);
-  const [thumbnailImportMode, setThumbnailImportMode] = useState<"cleaned" | "original">("cleaned");
+  const [thumbnailImportMode, setThumbnailImportMode] = useState<"cleaned" | "original">("original");
   const [isViewsTemplateOpen, setIsViewsTemplateOpen] = useState(false);
   const [savedViewsTemplates, setSavedViewsTemplates] = useState<ViewsTemplate[]>([]);
   const [isWatchTemplateOpen, setIsWatchTemplateOpen] = useState(false);
@@ -932,13 +926,9 @@ function ReelInsightsPage() {
       const storedThumb = localStorage.getItem("reel-insights-thumb");
       const storedChartThumb = localStorage.getItem("reel-insights-chart-thumb");
       const storedImportedThumb = localStorage.getItem("reel-insights-imported-thumb-url");
-      const storedThumbPlay = localStorage.getItem(THUMB_PLAY_KEY) === "on";
-      const storedChartThumbPlay = localStorage.getItem(CHART_THUMB_PLAY_KEY) === "on";
       if (storedThumb) setThumb(storedThumb);
       setChartThumb(storedChartThumb || storedThumb || reelThumb);
       if (storedImportedThumb) setImportedThumb(storedImportedThumb);
-      setThumbnailPlayOverlay(storedThumbPlay);
-      setChartThumbPlayOverlay(storedChartThumbPlay);
     } catch {}
   }, []);
 
@@ -953,13 +943,9 @@ function ReelInsightsPage() {
       const image = String(reader.result);
       setThumb(image);
       setChartThumb(image);
-      setThumbnailPlayOverlay(false);
-      setChartThumbPlayOverlay(false);
       try {
         localStorage.setItem("reel-insights-thumb", image);
         localStorage.setItem("reel-insights-chart-thumb", image);
-        localStorage.setItem(THUMB_PLAY_KEY, "off");
-        localStorage.setItem(CHART_THUMB_PLAY_KEY, "off");
       } catch {}
     };
     reader.readAsDataURL(file);
@@ -972,10 +958,8 @@ function ReelInsightsPage() {
     reader.onload = () => {
       const image = String(reader.result);
       setChartThumb(image);
-      setChartThumbPlayOverlay(false);
       try {
         localStorage.setItem("reel-insights-chart-thumb", image);
-        localStorage.setItem(CHART_THUMB_PLAY_KEY, "off");
       } catch {}
     };
     reader.readAsDataURL(file);
@@ -1210,8 +1194,6 @@ function ReelInsightsPage() {
       thumb,
       chartThumb,
       importedThumb,
-      thumbnailPlayOverlay,
-      chartThumbPlayOverlay,
       topGap,
       editedAgeKeys: [...editedAgeKeysRef.current],
     };
@@ -1222,16 +1204,12 @@ function ReelInsightsPage() {
     setThumb(layout.thumb);
     setChartThumb(layout.chartThumb);
     setImportedThumb(layout.importedThumb);
-    setThumbnailPlayOverlay(Boolean(layout.thumbnailPlayOverlay));
-    setChartThumbPlayOverlay(Boolean(layout.chartThumbPlayOverlay));
     setTopGap(layout.topGap);
     editedAgeKeysRef.current = new Set(layout.editedAgeKeys);
     try {
       localStorage.setItem("reel-insights-thumb", layout.thumb);
       localStorage.setItem("reel-insights-chart-thumb", layout.chartThumb);
       localStorage.setItem("reel-insights-imported-thumb-url", layout.importedThumb);
-      localStorage.setItem(THUMB_PLAY_KEY, layout.thumbnailPlayOverlay ? "on" : "off");
-      localStorage.setItem(CHART_THUMB_PLAY_KEY, layout.chartThumbPlayOverlay ? "on" : "off");
       localStorage.setItem(TOP_GAP_KEY, layout.topGap ? "on" : "off");
       localStorage.setItem(AGE_EDITED_KEYS_KEY, JSON.stringify(layout.editedAgeKeys));
     } catch {}
@@ -1268,26 +1246,22 @@ function ReelInsightsPage() {
       };
       save(imported.views === null ? next : syncViewsYAxis(next, count(imported.views)!));
       if (imported.thumbnail) {
-        const applyImportedThumbnail = (selectedThumbnail: string, showPlayOverlay: boolean) => {
+        const applyImportedThumbnail = (selectedThumbnail: string) => {
           if (importSequenceRef.current !== importSequence) return;
           setThumb(selectedThumbnail);
           setChartThumb(selectedThumbnail);
           setImportedThumb(selectedThumbnail);
-          setThumbnailPlayOverlay(showPlayOverlay);
-          setChartThumbPlayOverlay(showPlayOverlay);
           localStorage.setItem("reel-insights-thumb", selectedThumbnail);
           localStorage.setItem("reel-insights-chart-thumb", selectedThumbnail);
           localStorage.setItem("reel-insights-imported-thumb-url", selectedThumbnail);
-          localStorage.setItem(THUMB_PLAY_KEY, showPlayOverlay ? "on" : "off");
-          localStorage.setItem(CHART_THUMB_PLAY_KEY, showPlayOverlay ? "on" : "off");
         };
         // Complete the import immediately. AI cleanup is intentionally
         // background work because its first run downloads the local model.
-        applyImportedThumbnail(imported.thumbnail, thumbnailImportMode === "original");
+        applyImportedThumbnail(imported.thumbnail);
         if (thumbnailImportMode === "cleaned") {
           void cleanedThumbnail(imported.thumbnail)
             .then((cleaned) => {
-              applyImportedThumbnail(cleaned, false);
+              applyImportedThumbnail(cleaned);
               if (importSequenceRef.current === importSequence)
                 setImportNotice("Cleaned thumbnail applied.");
             })
@@ -1407,7 +1381,6 @@ function ReelInsightsPage() {
                 className="h-full w-full object-cover"
                 decoding="async"
               />
-              {thumbnailPlayOverlay && <ThumbnailPlayOverlay />}
               <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100">
                 Change photo
               </span>
@@ -1664,7 +1637,6 @@ function ReelInsightsPage() {
               <MediaChart
                 title="How long people watched your reel"
                 thumb={chartThumb}
-                showPlayOverlay={chartThumbPlayOverlay}
                 onChangeThumb={() => chartFileRef.current?.click()}
                 onTemplateRequest={() => setIsWatchTemplateOpen(true)}
               >
@@ -1778,7 +1750,7 @@ function ReelInsightsPage() {
                   />
                 </div>
               </div>
-              <MediaChart title="When people liked your reel" thumb={chartThumb} showPlayOverlay={chartThumbPlayOverlay} onChangeThumb={() => chartFileRef.current?.click()} onTemplateRequest={() => setIsLikesTemplateOpen(true)}>
+              <MediaChart title="When people liked your reel" thumb={chartThumb} onChangeThumb={() => chartFileRef.current?.click()} onTemplateRequest={() => setIsLikesTemplateOpen(true)}>
                 <EditableSingleChart
                   data={data.likesOverTime}
                   onChange={(value) => {
@@ -1994,11 +1966,11 @@ function ReelInsightsPage() {
               <div className="mt-2 grid gap-2">
                 <label className="flex cursor-pointer gap-3 rounded-xl border border-white/15 p-3 text-sm text-white has-[:checked]:border-[#eb22d4] has-[:checked]:bg-[#eb22d4]/10">
                   <input type="radio" name="thumbnail-version" value="cleaned" checked={thumbnailImportMode === "cleaned"} onChange={() => setThumbnailImportMode("cleaned")} className="mt-0.5 accent-[#eb22d4]" />
-                  <span><span className="block font-medium">Cleaned thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Display in the square cover frame and locally remove the centered play button.</span></span>
+                  <span><span className="block font-medium">Cleaned thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Use local cleanup to remove a centered play-button wrapper when the source includes one.</span></span>
                 </label>
                 <label className="flex cursor-pointer gap-3 rounded-xl border border-white/15 p-3 text-sm text-white has-[:checked]:border-[#eb22d4] has-[:checked]:bg-[#eb22d4]/10">
                   <input type="radio" name="thumbnail-version" value="original" checked={thumbnailImportMode === "original"} onChange={() => setThumbnailImportMode("original")} className="mt-0.5 accent-[#eb22d4]" />
-                  <span><span className="block font-medium">Original thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Display the original crop with a circular play button overlay.</span></span>
+                  <span><span className="block font-medium">Original thumbnail</span><span className="mt-0.5 block text-xs text-white/60">Use the thumbnail from the public Reel page without adding an overlay.</span></span>
                 </label>
               </div>
             </fieldset>
@@ -2420,27 +2392,15 @@ function CountryRow({
     </div>
   );
 }
-function ThumbnailPlayOverlay() {
-  return (
-    <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/60 ring-1 ring-white/80 shadow-lg">
-      <svg className="ml-1 h-6 w-6" viewBox="0 0 24 24" fill="white">
-        <path d="M7 4.8a1 1 0 0 1 1.52-.85l11 7.2a1 1 0 0 1 0 1.7l-11 7.2A1 1 0 0 1 7 19.2z" />
-      </svg>
-    </span>
-  );
-}
-
 function MediaChart({
   title,
   thumb,
-  showPlayOverlay,
   onChangeThumb,
   onTemplateRequest,
   children,
 }: {
   title: string;
   thumb: string;
-  showPlayOverlay: boolean;
   onChangeThumb: () => void;
   onTemplateRequest?: () => void;
   children: React.ReactNode;
@@ -2457,7 +2417,6 @@ function MediaChart({
             loading="lazy"
             decoding="async"
           />
-          {showPlayOverlay && <ThumbnailPlayOverlay />}
           <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-[11px] text-white opacity-0 transition-colors group-hover:bg-black/40 group-hover:opacity-100">Change photo</span>
         </button>
       </div>
