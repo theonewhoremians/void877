@@ -927,11 +927,14 @@ function ReelInsightsPage() {
       const storedChartThumb = localStorage.getItem("reel-insights-chart-thumb");
       const storedImportedThumb = localStorage.getItem("reel-insights-imported-thumb-url");
       const storedOriginalImportedThumb = localStorage.getItem(ORIGINAL_IMPORTED_THUMB_KEY);
+      const legacyOriginalThumbnail = storedImportedThumb?.startsWith("data:")
+        ? ""
+        : storedImportedThumb;
       if (storedThumb) setThumb(storedThumb);
       setChartThumb(storedChartThumb || storedThumb || reelThumb);
       if (storedImportedThumb) setImportedThumb(storedImportedThumb);
-      if (storedOriginalImportedThumb || storedImportedThumb)
-        setOriginalImportedThumb(storedOriginalImportedThumb || storedImportedThumb || "");
+      if (storedOriginalImportedThumb || legacyOriginalThumbnail)
+        setOriginalImportedThumb(storedOriginalImportedThumb || legacyOriginalThumbnail || "");
     } catch {}
   }, []);
 
@@ -1208,7 +1211,8 @@ function ReelInsightsPage() {
     setThumb(layout.thumb);
     setChartThumb(layout.chartThumb);
     setImportedThumb(layout.importedThumb);
-    const originalThumbnail = layout.originalImportedThumb ?? layout.importedThumb;
+    const originalThumbnail = layout.originalImportedThumb ??
+      (layout.importedThumb.startsWith("data:") ? "" : layout.importedThumb);
     setOriginalImportedThumb(originalThumbnail);
     setTopGap(layout.topGap);
     editedAgeKeysRef.current = new Set(layout.editedAgeKeys);
