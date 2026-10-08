@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Info,
   MoreVertical,
-  TrendingUp,
 } from "lucide-react";
 import reelThumb from "@/assets/reel-thumb.jpg";
 import icHeart from "@/assets/ig-icon/heart.png.png";
@@ -32,6 +31,7 @@ const VIEWS_TEMPLATES_KEY = "reel-insights-views-templates-v1";
 const WATCH_TEMPLATES_KEY = "reel-insights-watch-templates-v1";
 const LIKES_TEMPLATES_KEY = "reel-insights-likes-templates-v1";
 const TOP_GAP_KEY = "reel-insights-top-gap-v1";
+const ORIGINAL_IMPORTED_THUMB_KEY = "reel-insights-original-imported-thumb-url";
 const AGE_EDITED_KEYS_KEY = "reel-insights-age-edited-keys-v1";
 const LAYOUTS_KEY = "reel-insights-layouts-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
@@ -394,6 +394,7 @@ type SavedLayout = {
   thumb: string;
   chartThumb: string;
   importedThumb: string;
+  originalImportedThumb?: string;
   topGap: boolean;
   editedAgeKeys: Array<"a1" | "a2" | "a3" | "a4" | "a5" | "a6">;
 };
@@ -786,7 +787,7 @@ function ReelInsightsPage() {
   const [thumb, setThumb] = useState<string>(reelThumb);
   const [chartThumb, setChartThumb] = useState<string>(reelThumb);
   const [importedThumb, setImportedThumb] = useState("");
-  const [isTrendMenuOpen, setIsTrendMenuOpen] = useState(false);
+  const [originalImportedThumb, setOriginalImportedThumb] = useState("");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [topGap, setTopGap] = useState(false);
   const [isLayoutsOpen, setIsLayoutsOpen] = useState(false);
@@ -925,9 +926,12 @@ function ReelInsightsPage() {
       const storedThumb = localStorage.getItem("reel-insights-thumb");
       const storedChartThumb = localStorage.getItem("reel-insights-chart-thumb");
       const storedImportedThumb = localStorage.getItem("reel-insights-imported-thumb-url");
+      const storedOriginalImportedThumb = localStorage.getItem(ORIGINAL_IMPORTED_THUMB_KEY);
       if (storedThumb) setThumb(storedThumb);
       setChartThumb(storedChartThumb || storedThumb || reelThumb);
       if (storedImportedThumb) setImportedThumb(storedImportedThumb);
+      if (storedOriginalImportedThumb || storedImportedThumb)
+        setOriginalImportedThumb(storedOriginalImportedThumb || storedImportedThumb || "");
     } catch {}
   }, []);
 
@@ -964,21 +968,21 @@ function ReelInsightsPage() {
     reader.readAsDataURL(file);
     event.target.value = "";
   };
-  const downloadImportedThumbnail = async () => {
-    if (!importedThumb) return;
+  const downloadOriginalThumbnail = async () => {
+    if (!originalImportedThumb) return;
     try {
-      const response = await fetch(importedThumb.startsWith("data:") ? importedThumb : `/api/download-thumbnail?url=${encodeURIComponent(importedThumb)}`);
+      const response = await fetch(originalImportedThumb.startsWith("data:") ? originalImportedThumb : `/api/download-thumbnail?url=${encodeURIComponent(originalImportedThumb)}`);
       if (!response.ok) throw new Error("Download failed");
       const objectUrl = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = objectUrl;
-      link.download = "imported-reel-thumbnail.jpg";
+      link.download = "original-reel-thumbnail.jpg";
       link.click();
       URL.revokeObjectURL(objectUrl);
     } catch {
-      window.open(importedThumb, "_blank", "noopener,noreferrer");
+      window.open(originalImportedThumb, "_blank", "noopener,noreferrer");
     } finally {
-      setIsTrendMenuOpen(false);
+      setIsMoreMenuOpen(false);
     }
   };
   const handleHeaderSave = () => {
@@ -1193,6 +1197,7 @@ function ReelInsightsPage() {
       thumb,
       chartThumb,
       importedThumb,
+      originalImportedThumb,
       topGap,
       editedAgeKeys: [...editedAgeKeysRef.current],
     };
@@ -1203,12 +1208,15 @@ function ReelInsightsPage() {
     setThumb(layout.thumb);
     setChartThumb(layout.chartThumb);
     setImportedThumb(layout.importedThumb);
+    const originalThumbnail = layout.originalImportedThumb ?? layout.importedThumb;
+    setOriginalImportedThumb(originalThumbnail);
     setTopGap(layout.topGap);
     editedAgeKeysRef.current = new Set(layout.editedAgeKeys);
     try {
       localStorage.setItem("reel-insights-thumb", layout.thumb);
       localStorage.setItem("reel-insights-chart-thumb", layout.chartThumb);
       localStorage.setItem("reel-insights-imported-thumb-url", layout.importedThumb);
+      localStorage.setItem(ORIGINAL_IMPORTED_THUMB_KEY, originalThumbnail);
       localStorage.setItem(TOP_GAP_KEY, layout.topGap ? "on" : "off");
       localStorage.setItem(AGE_EDITED_KEYS_KEY, JSON.stringify(layout.editedAgeKeys));
     } catch {}
@@ -1245,6 +1253,10 @@ function ReelInsightsPage() {
       };
       save(imported.views === null ? next : syncViewsYAxis(next, count(imported.views)!));
       if (imported.thumbnail) {
+        if (importSequenceRef.current === importSequence) {
+          setOriginalImportedThumb(imported.thumbnail);
+          localStorage.setItem(ORIGINAL_IMPORTED_THUMB_KEY, imported.thumbnail);
+        }
         const applyImportedThumbnail = (selectedThumbnail: string) => {
           if (importSequenceRef.current !== importSequence) return;
           setThumb(selectedThumbnail);
@@ -1309,22 +1321,9 @@ function ReelInsightsPage() {
             />
           </button>
           <div className="relative">
-            <button onClick={() => setIsTrendMenuOpen((open) => !open)} aria-label="Thumbnail options" aria-expanded={isTrendMenuOpen} className="p-1 text-zinc-100 hover:text-white">
-              <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
-            </button>
-            {isTrendMenuOpen && (
-              <div className="absolute right-0 top-10 z-30 w-56 rounded-xl border border-white/15 bg-zinc-950 p-1.5 shadow-2xl">
-                <button type="button" disabled={!importedThumb} onClick={downloadImportedThumbnail} className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-white/35">
-                  {importedThumb ? "Download imported thumbnail" : "Import a thumbnail first"}
-                </button>
-              </div>
-            )}
-          </div>
-          <div className="relative">
             <button
               onClick={() => {
                 setIsMoreMenuOpen((open) => !open);
-                setIsTrendMenuOpen(false);
               }}
               aria-label="More options"
               aria-expanded={isMoreMenuOpen}
@@ -1340,6 +1339,14 @@ function ReelInsightsPage() {
                   className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10"
                 >
                   Import Instagram reel
+                </button>
+                <button
+                  type="button"
+                  disabled={!originalImportedThumb}
+                  onClick={downloadOriginalThumbnail}
+                  className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-white/35"
+                >
+                  Download original thumbnail
                 </button>
                 <button
                   type="button"
