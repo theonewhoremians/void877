@@ -2337,7 +2337,7 @@ function BarRow({
           value={value}
           onChange={onChange}
           className="w-14 text-right text-[14px] font-semibold"
-          style={{ fontFamily: SF_PRO_FONT_STACK }}
+          style={{ fontFamily: SF_PRO_FONT_STACK, fontWeight: 650 }}
         />
       </div>
     </div>
@@ -2375,7 +2375,7 @@ function CountryRow({
           value={val}
           onChange={onVal}
           className="w-14 text-right text-[14px] font-semibold"
-          style={{ fontFamily: SF_PRO_FONT_STACK }}
+          style={{ fontFamily: SF_PRO_FONT_STACK, fontWeight: 650 }}
         />
       </div>
     </div>
