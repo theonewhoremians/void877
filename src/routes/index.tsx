@@ -1401,8 +1401,10 @@ function ReelInsightsPage() {
               type="button"
               onClick={() => fileRef.current?.click()}
               className={
-                "group relative w-[min(62vw,244px)] overflow-hidden rounded-lg shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4] " +
-                (thumbnailAspectRatio === "square" ? "aspect-square" : "aspect-[9/16]")
+                "group relative overflow-hidden rounded-lg shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4] " +
+                (thumbnailAspectRatio === "square"
+                  ? "aspect-square w-[min(62vw,244px)]"
+                  : "aspect-[9/16] w-[42%]")
               }
               aria-label="Change thumbnail"
             >
