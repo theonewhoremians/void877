@@ -32,6 +32,7 @@ const WATCH_TEMPLATES_KEY = "reel-insights-watch-templates-v1";
 const LIKES_TEMPLATES_KEY = "reel-insights-likes-templates-v1";
 const TOP_GAP_KEY = "reel-insights-top-gap-v1";
 const ORIGINAL_IMPORTED_THUMB_KEY = "reel-insights-original-imported-thumb-url";
+const THUMBNAIL_ASPECT_RATIO_KEY = "reel-insights-thumbnail-aspect-ratio-v1";
 const AGE_EDITED_KEYS_KEY = "reel-insights-age-edited-keys-v1";
 const LAYOUTS_KEY = "reel-insights-layouts-v1";
 const LICENSE_REVALIDATE_MS = 60_000;
@@ -386,6 +387,7 @@ const defaultData = {
 };
 
 type DataShape = typeof defaultData;
+type ThumbnailAspectRatio = "square" | "portrait";
 type ImpactStatus = "Higher" | "Lower" | "LowerGreen" | "Typical";
 type SavedLayout = {
   id: string;
@@ -395,6 +397,7 @@ type SavedLayout = {
   chartThumb: string;
   importedThumb: string;
   originalImportedThumb?: string;
+  thumbnailAspectRatio?: ThumbnailAspectRatio;
   topGap: boolean;
   editedAgeKeys: Array<"a1" | "a2" | "a3" | "a4" | "a5" | "a6">;
 };
@@ -788,6 +791,8 @@ function ReelInsightsPage() {
   const [chartThumb, setChartThumb] = useState<string>(reelThumb);
   const [importedThumb, setImportedThumb] = useState("");
   const [originalImportedThumb, setOriginalImportedThumb] = useState("");
+  const [thumbnailAspectRatio, setThumbnailAspectRatio] =
+    useState<ThumbnailAspectRatio>("square");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [topGap, setTopGap] = useState(false);
   const [isLayoutsOpen, setIsLayoutsOpen] = useState(false);
@@ -927,6 +932,7 @@ function ReelInsightsPage() {
       const storedChartThumb = localStorage.getItem("reel-insights-chart-thumb");
       const storedImportedThumb = localStorage.getItem("reel-insights-imported-thumb-url");
       const storedOriginalImportedThumb = localStorage.getItem(ORIGINAL_IMPORTED_THUMB_KEY);
+      const storedAspectRatio = localStorage.getItem(THUMBNAIL_ASPECT_RATIO_KEY);
       const legacyOriginalThumbnail = storedImportedThumb?.startsWith("data:")
         ? ""
         : storedImportedThumb;
@@ -935,6 +941,8 @@ function ReelInsightsPage() {
       if (storedImportedThumb) setImportedThumb(storedImportedThumb);
       if (storedOriginalImportedThumb || legacyOriginalThumbnail)
         setOriginalImportedThumb(storedOriginalImportedThumb || legacyOriginalThumbnail || "");
+      if (storedAspectRatio === "square" || storedAspectRatio === "portrait")
+        setThumbnailAspectRatio(storedAspectRatio);
     } catch {}
   }, []);
 
@@ -1183,13 +1191,19 @@ function ReelInsightsPage() {
       return next;
     });
   };
+  const selectThumbnailAspectRatio = (ratio: ThumbnailAspectRatio) => {
+    setThumbnailAspectRatio(ratio);
+    try { localStorage.setItem(THUMBNAIL_ASPECT_RATIO_KEY, ratio); } catch {}
+  };
   const persistLayouts = (layouts: SavedLayout[]) => {
     try {
       localStorage.setItem(LAYOUTS_KEY, JSON.stringify(layouts));
       setSavedLayouts(layouts);
       setLayoutError("");
+      return true;
     } catch {
       setLayoutError("Could not save the layout because browser storage is full.");
+      return false;
     }
   };
   const saveCurrentLayout = () => {
@@ -1201,10 +1215,11 @@ function ReelInsightsPage() {
       chartThumb,
       importedThumb,
       originalImportedThumb,
+      thumbnailAspectRatio,
       topGap,
       editedAgeKeys: [...editedAgeKeysRef.current],
     };
-    persistLayouts([...savedLayouts, layout]);
+    if (persistLayouts([...savedLayouts, layout])) setIsLayoutsOpen(false);
   };
   const applyLayout = (layout: SavedLayout) => {
     save({ ...defaultData, ...layout.data });
@@ -1214,6 +1229,8 @@ function ReelInsightsPage() {
     const originalThumbnail = layout.originalImportedThumb ??
       (layout.importedThumb.startsWith("data:") ? "" : layout.importedThumb);
     setOriginalImportedThumb(originalThumbnail);
+    const layoutAspectRatio = layout.thumbnailAspectRatio ?? "square";
+    setThumbnailAspectRatio(layoutAspectRatio);
     setTopGap(layout.topGap);
     editedAgeKeysRef.current = new Set(layout.editedAgeKeys);
     try {
@@ -1221,6 +1238,7 @@ function ReelInsightsPage() {
       localStorage.setItem("reel-insights-chart-thumb", layout.chartThumb);
       localStorage.setItem("reel-insights-imported-thumb-url", layout.importedThumb);
       localStorage.setItem(ORIGINAL_IMPORTED_THUMB_KEY, originalThumbnail);
+      localStorage.setItem(THUMBNAIL_ASPECT_RATIO_KEY, layoutAspectRatio);
       localStorage.setItem(TOP_GAP_KEY, layout.topGap ? "on" : "off");
       localStorage.setItem(AGE_EDITED_KEYS_KEY, JSON.stringify(layout.editedAgeKeys));
     } catch {}
@@ -1382,7 +1400,10 @@ function ReelInsightsPage() {
           <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="group relative aspect-square w-[min(62vw,244px)] overflow-hidden rounded-lg shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4]"
+              className={
+                "group relative w-[min(62vw,244px)] overflow-hidden rounded-lg shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4] " +
+                (thumbnailAspectRatio === "square" ? "aspect-square" : "aspect-[9/16]")
+              }
               aria-label="Change thumbnail"
             >
               <img
@@ -1993,6 +2014,33 @@ function ReelInsightsPage() {
             <div className="flex items-center justify-between gap-3">
               <h2 id="layouts-title" className="text-lg font-semibold text-white">Layouts</h2>
               <button type="button" onClick={() => setIsLayoutsOpen(false)} className="rounded-lg px-3 py-2 text-sm text-white">Close</button>
+            </div>
+            <div className="mt-4">
+              <p className="text-sm font-medium text-white">Main thumbnail aspect ratio</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  aria-pressed={thumbnailAspectRatio === "square"}
+                  onClick={() => selectThumbnailAspectRatio("square")}
+                  className={
+                    "rounded-lg border px-3 py-2.5 text-sm " +
+                    (thumbnailAspectRatio === "square" ? "border-[#eb22d4] bg-[#eb22d4]/15 text-white" : "border-white/15 text-white/70 hover:bg-white/10")
+                  }
+                >
+                  Previous · 1:1
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={thumbnailAspectRatio === "portrait"}
+                  onClick={() => selectThumbnailAspectRatio("portrait")}
+                  className={
+                    "rounded-lg border px-3 py-2.5 text-sm " +
+                    (thumbnailAspectRatio === "portrait" ? "border-[#eb22d4] bg-[#eb22d4]/15 text-white" : "border-white/15 text-white/70 hover:bg-white/10")
+                  }
+                >
+                  New · 9:16
+                </button>
+              </div>
             </div>
             <button type="button" onClick={saveCurrentLayout} className="mt-4 w-full rounded-xl bg-[#eb22d4] px-4 py-3 text-sm font-semibold text-white">Save current layout</button>
             {layoutError && <p className="mt-3 text-sm text-red-300">{layoutError}</p>}
