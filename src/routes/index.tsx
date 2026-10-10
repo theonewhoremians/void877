@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Info,
   MoreVertical,
+  TrendingUp,
 } from "lucide-react";
 import reelThumb from "@/assets/reel-thumb.jpg";
 import icHeart from "@/assets/ig-icon/heart.png.png";
@@ -793,6 +794,7 @@ function ReelInsightsPage() {
   const [originalImportedThumb, setOriginalImportedThumb] = useState("");
   const [thumbnailAspectRatio, setThumbnailAspectRatio] =
     useState<ThumbnailAspectRatio>("square");
+  const [isTrendMenuOpen, setIsTrendMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [topGap, setTopGap] = useState(false);
   const [isLayoutsOpen, setIsLayoutsOpen] = useState(false);
@@ -979,23 +981,27 @@ function ReelInsightsPage() {
     reader.readAsDataURL(file);
     event.target.value = "";
   };
-  const downloadOriginalThumbnail = async () => {
-    if (!originalImportedThumb) return;
+  const downloadThumbnail = async (source: string, filename: string, closeMenu: () => void) => {
+    if (!source) return;
     try {
-      const response = await fetch(originalImportedThumb.startsWith("data:") ? originalImportedThumb : `/api/download-thumbnail?url=${encodeURIComponent(originalImportedThumb)}`);
+      const response = await fetch(source.startsWith("data:") ? source : `/api/download-thumbnail?url=${encodeURIComponent(source)}`);
       if (!response.ok) throw new Error("Download failed");
       const objectUrl = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = objectUrl;
-      link.download = "original-reel-thumbnail.jpg";
+      link.download = filename;
       link.click();
       URL.revokeObjectURL(objectUrl);
     } catch {
-      window.open(originalImportedThumb, "_blank", "noopener,noreferrer");
+      window.open(source, "_blank", "noopener,noreferrer");
     } finally {
-      setIsMoreMenuOpen(false);
+      closeMenu();
     }
   };
+  const downloadOriginalThumbnail = () =>
+    downloadThumbnail(originalImportedThumb, "original-reel-thumbnail.jpg", () => setIsMoreMenuOpen(false));
+  const downloadImportedThumbnail = () =>
+    downloadThumbnail(importedThumb, "imported-reel-thumbnail.jpg", () => setIsTrendMenuOpen(false));
   const handleHeaderSave = () => {
     if (document.activeElement instanceof HTMLElement)
       document.activeElement.blur();
@@ -1344,8 +1350,35 @@ function ReelInsightsPage() {
           </button>
           <div className="relative">
             <button
+              type="button"
+              onClick={() => {
+                setIsTrendMenuOpen((open) => !open);
+                setIsMoreMenuOpen(false);
+              }}
+              aria-label="Thumbnail options"
+              aria-expanded={isTrendMenuOpen}
+              className="p-1 text-zinc-100 hover:text-white"
+            >
+              <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
+            </button>
+            {isTrendMenuOpen && (
+              <div className="absolute right-0 top-10 z-30 w-56 rounded-xl border border-white/15 bg-zinc-950 p-1.5 shadow-2xl">
+                <button
+                  type="button"
+                  disabled={!importedThumb}
+                  onClick={downloadImportedThumbnail}
+                  className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-white/35"
+                >
+                  {importedThumb ? "Download imported thumbnail" : "Import a thumbnail first"}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <button
               onClick={() => {
                 setIsMoreMenuOpen((open) => !open);
+                setIsTrendMenuOpen(false);
               }}
               aria-label="More options"
               aria-expanded={isMoreMenuOpen}
