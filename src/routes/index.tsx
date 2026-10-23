@@ -1437,7 +1437,7 @@ function ReelInsightsPage() {
                 "group relative overflow-hidden rounded-lg shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4] " +
                 (thumbnailAspectRatio === "square"
                   ? "aspect-square w-[min(62vw,244px)]"
-                  : "aspect-[9/16] w-[42%]")
+                  : "h-[409px] w-[231px]")
               }
               aria-label="Change thumbnail"
             >
