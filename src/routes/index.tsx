@@ -2838,7 +2838,7 @@ function EditableSingleChart({
     if (templatePointers.current.size < 2) clearTemplateTimer();
   };
   return (
-    <div className="relative mt-6 h-44 select-none">
+    <div className="relative mt-6 h-[112px] select-none">
       <div className="absolute left-0 top-2 text-[11px] text-white/50">
         <Editable value={yTop} onChange={onYTop} />
       </div>
