@@ -1437,7 +1437,7 @@ function ReelInsightsPage() {
                 "group relative overflow-hidden rounded-lg shadow-2xl focus:outline-none focus:ring-2 focus:ring-[#eb22d4] " +
                 (thumbnailAspectRatio === "square"
                   ? "aspect-square w-[min(62vw,244px)]"
-                  : "h-[409px] w-[231px]")
+                  : "aspect-[231/409] w-[min(32.2vw,231px)]")
               }
               aria-label="Change thumbnail"
             >
@@ -2839,14 +2839,16 @@ function EditableSingleChart({
   };
   return (
     <div className="relative mt-6 h-[112px] select-none">
-      <div className="absolute left-0 top-2 text-[11px] text-white/50">
-        <Editable value={yTop} onChange={onYTop} />
-      </div>
-      <div className="absolute left-0 top-1/2 text-[11px] text-white/50">
-        <Editable value={yMid} onChange={onYMid} />
-      </div>
-      <div className="absolute bottom-6 left-0 text-[11px] text-white/50">
-        0
+      <div className="absolute left-0 top-0 h-[calc(100%-1.5rem)] w-10 text-[11px] text-white/50">
+        <div className="absolute left-0 top-[7.143%] -translate-y-1/2">
+          <Editable value={yTop} onChange={onYTop} />
+        </div>
+        <div className="absolute left-0 top-1/2 -translate-y-1/2">
+          <Editable value={yMid} onChange={onYMid} />
+        </div>
+        <div className="absolute bottom-[7.143%] left-0 translate-y-1/2">
+          0
+        </div>
       </div>
       <svg
         ref={drag.svgRef}
