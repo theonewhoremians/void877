@@ -1,5 +1,5 @@
 import { corsHeaders, json, options } from "../_shared/cors.ts";
-import { cleanCode, cleanDevice, db, publicLicense, signLicense, type License } from "../_shared/license.ts";
+import { cleanCode, cleanDevice, createLicenseSession, db, type License } from "../_shared/license.ts";
 
 Deno.serve(async request => {
   const preflight = options(request); if (preflight) return preflight;
@@ -16,6 +16,6 @@ Deno.serve(async request => {
       if (m.includes("LICENSE_NOT_FOUND")) return json({ error: "Invalid access code." }, 404);
       throw error;
     }
-    const license = data as License; return json({ token: await signLicense(license), expiresAt: new Date(Date.now() + 86400000).toISOString(), license: publicLicense(license) });
+    const license = data as License; return json(await createLicenseSession(license));
   } catch (error) { console.error("activation error", error); return json({ error: error instanceof Error ? error.message : "Activation failed." }, 400); }
 }, { onListen: () => {} });

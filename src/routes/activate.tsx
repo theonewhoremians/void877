@@ -17,9 +17,9 @@ function ActivatePage() {
 
   useEffect(() => {
     const current = loadSession();
-    if (current && new Date(current.expiresAt) > new Date()) {
-      // A valid local token authorizes offline use. The home route performs
-      // the non-blocking online status check after the app has opened.
+    if (current) {
+      // Let the home route validate or renew the saved session. Expired local
+      // tokens are still checked server-side before asking for the code again.
       void navigate({ to: "/", replace: true });
       return;
     }

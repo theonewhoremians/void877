@@ -6,9 +6,22 @@ export type LicenseSession = {
   license: { id: string; plan: string; expiresAt: string | null; active: boolean };
 };
 
+export type LicenseStatus = {
+  license: LicenseSession["license"];
+  token?: string;
+  expiresAt?: string;
+};
+
 const SESSION_KEY = "editflow-license-session";
 
-function clientError(message: string): Error { return new Error(message); }
+export class LicenseServiceError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = "LicenseServiceError";
+  }
+}
+
+function clientError(message: string, status?: number) { return new LicenseServiceError(message, status); }
 
 async function call<T>(name: string, body?: unknown, method = "POST", token?: string): Promise<T> {
   if (!supabase) throw clientError("License service is not configured.");
@@ -26,7 +39,7 @@ async function call<T>(name: string, body?: unknown, method = "POST", token?: st
         serverMessage = result.error;
       } catch {}
     }
-    throw clientError(serverMessage ?? data?.error ?? error.message);
+    throw clientError(serverMessage ?? data?.error ?? error.message, response?.status);
   }
   if (data?.error) throw clientError(data.error);
   return data as T;
@@ -46,7 +59,11 @@ export async function activateLicense(accessCode: string, deviceId: string, appV
 }
 
 export async function getLicenseStatus(token: string) {
-  return call<LicenseSession["license"]>("license-status", undefined, "GET", token);
+  return call<LicenseStatus>("license-status", undefined, "GET", token);
+}
+
+export function isLicenseDenied(error: unknown) {
+  return error instanceof LicenseServiceError && [401, 403, 404].includes(error.status ?? 0);
 }
 
 export async function refreshLicense(accessCode: string, deviceId: string, appVersion: string) {

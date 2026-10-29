@@ -21,7 +21,9 @@ import ic2Comment from "@/assets/ig-icon2/comment.png";
 import {
   clearSession,
   getLicenseStatus,
+  isLicenseDenied,
   loadSession,
+  saveSession,
 } from "@/services/license";
 import { importPublicInstagramReel } from "@/services/instagram-import";
 
@@ -886,21 +888,28 @@ function ReelInsightsPage() {
       void navigate({ to: "/activate", replace: true });
     };
 
+    let licenseCheckInFlight = false;
     const checkLicense = async () => {
-      const session = loadSession();
-      if (!session || new Date(session.expiresAt) <= new Date()) {
-        revokeAccess();
-        return;
-      }
-
-      if (active) setAccess("allowed");
-
+      if (!active || licenseCheckInFlight) return;
+      licenseCheckInFlight = true;
       try {
-        await getLicenseStatus(session.token);
-      } catch {
-        // Offline use stays allowed while the token is still valid.
-        // An online rejection means the license was removed, disabled, expired, or moved.
-        if (navigator.onLine) revokeAccess();
+        const session = loadSession();
+        if (!session) {
+          revokeAccess();
+          return;
+        }
+
+        if (active) setAccess("allowed");
+        const status = await getLicenseStatus(session.token);
+        if (status.token && status.expiresAt) {
+          saveSession({ ...session, token: status.token, expiresAt: status.expiresAt, license: status.license });
+        }
+      } catch (error) {
+        // Only an explicit server denial clears activation. Temporary network
+        // failures keep the saved session and are retried on the next check.
+        if (isLicenseDenied(error)) revokeAccess();
+      } finally {
+        licenseCheckInFlight = false;
       }
     };
 
