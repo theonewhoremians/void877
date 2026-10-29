@@ -303,7 +303,7 @@ async function graphPatternFromImage(file: File): Promise<ViewsTemplate> {
 }
 
 const defaultData = {
-  title: "Reel Insights",
+  title: "Reel insights",
   accountsReachedLabel: "Accounts reached",
   likes: "739",
   comments: "5",
@@ -624,6 +624,9 @@ function useLocalData() {
         const restoredData = {
           ...defaultData,
           ...stored,
+          title: stored.title === "Reel Insights"
+            ? defaultData.title
+            : stored.title ?? defaultData.title,
           ...(stored.viewsX2 && parseGraphDuration(stored.viewsX2) !== null
             ? { viewsX0: defaultData.viewsX0, viewsX1: defaultData.viewsX1, viewsX2: defaultData.viewsX2 }
             : {}),
@@ -1005,7 +1008,6 @@ function ReelInsightsPage() {
   const handleHeaderSave = () => {
     if (document.activeElement instanceof HTMLElement)
       document.activeElement.blur();
-    save(data);
     flushPendingSave();
     setEditing(false);
     setSavedToast(true);

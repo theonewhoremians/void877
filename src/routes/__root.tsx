@@ -77,10 +77,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Reel Insights" },
+      { title: "Reel insights" },
       { name: "description", content: "Editable Reel Insights dashboard — tap any number to edit." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Reel Insights" },
+      { property: "og:title", content: "Reel insights" },
       { property: "og:description", content: "Editable Reel Insights dashboard — tap any number to edit." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
