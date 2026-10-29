@@ -1339,7 +1339,7 @@ function ReelInsightsPage() {
       <div className="mx-auto max-w-md pb-6">
         <header
           className="sticky top-0 z-20 flex items-center gap-3 bg-[#0c0f14]/95 px-4 pb-3 pt-4 backdrop-blur"
-          style={{ paddingTop: topGap ? "calc(env(safe-area-inset-top, 0px) + 1.4rem)" : undefined }}
+          style={{ paddingTop: topGap ? "calc(env(safe-area-inset-top, 0px) + 1.26rem)" : undefined }}
         >
           <button
             aria-label="Back"
