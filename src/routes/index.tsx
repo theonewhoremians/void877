@@ -1506,11 +1506,11 @@ function ReelInsightsPage() {
             </button>
           ))}
         </div>
-        <div className="px-4 pt-10">
+        <div className="px-4 pt-6">
           {tab === "Overview" && (
             <>
               <SectionTitle>Summary</SectionTitle>
-              <div className="mt-10 grid grid-cols-2 gap-x-3 gap-y-3.5">
+              <div className="mt-6 grid grid-cols-2 gap-x-3 gap-y-3.5">
                 <SummaryCard
                   label="Views"
                   value={data.views}
