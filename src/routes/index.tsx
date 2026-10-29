@@ -889,8 +889,10 @@ function ReelInsightsPage() {
     };
 
     let licenseCheckInFlight = false;
-    const checkLicense = async () => {
-      if (!active || licenseCheckInFlight) return;
+    const checkLicense = async (requireValidation = false) => {
+      if (!active) return;
+      if (requireValidation) setAccess("checking");
+      if (licenseCheckInFlight) return;
       licenseCheckInFlight = true;
       try {
         const session = loadSession();
@@ -899,11 +901,11 @@ function ReelInsightsPage() {
           return;
         }
 
-        if (active) setAccess("allowed");
         const status = await getLicenseStatus(session.token);
         if (status.token && status.expiresAt) {
           saveSession({ ...session, token: status.token, expiresAt: status.expiresAt, license: status.license });
         }
+        if (active) setAccess("allowed");
       } catch (error) {
         // Only an explicit server denial clears activation. Temporary network
         // failures keep the saved session and are retried on the next check.
@@ -913,18 +915,18 @@ function ReelInsightsPage() {
       }
     };
 
-    void checkLicense();
+    void checkLicense(true);
 
     const intervalId = window.setInterval(() => {
       void checkLicense();
     }, LICENSE_REVALIDATE_MS);
 
     const handleWindowFocus = () => {
-      void checkLicense();
+      void checkLicense(true);
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") void checkLicense();
+      if (document.visibilityState === "visible") void checkLicense(true);
     };
 
     window.addEventListener("focus", handleWindowFocus);
