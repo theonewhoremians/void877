@@ -2197,7 +2197,7 @@ function TrendLoadingSkeleton({
         </header>
         <div className="flex justify-center pt-5">
           <div className={
-            "overflow-hidden rounded-lg " +
+            "relative overflow-hidden rounded-lg shadow-2xl " +
             (aspectRatio === "square"
               ? "aspect-square w-[min(62vw,244px)]"
               : "aspect-[231/409] w-[min(32.2vw,231px)]")
@@ -2209,7 +2209,7 @@ function TrendLoadingSkeleton({
           {stats.map((icon, index) => (
             <div key={index} className="flex flex-col items-center gap-1.5 text-white/95">
               <div className="flex h-7 items-center justify-center">{icon}</div>
-              <div className="h-5 w-9 animate-pulse rounded bg-[#252a31]" />
+              <div className="insight-shimmer h-5 w-9 rounded bg-[#252a31]" />
             </div>
           ))}
         </div>
@@ -2231,30 +2231,60 @@ function TrendLoadingSkeleton({
           <SectionTitle>{firstSection}</SectionTitle>
           <div className="mt-6 grid grid-cols-2 gap-x-3 gap-y-3.5">
             {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="h-[104px] animate-pulse rounded-2xl bg-[#252a31]" />
+              <div key={index} className="rounded-xl bg-[#25282d] px-4 py-4">
+                <div className={
+                  "insight-shimmer h-5 rounded bg-[#3a3f46] " +
+                  (index === 1 ? "w-24" : index === 2 ? "w-28" : "w-16")
+                } />
+                <div className="insight-shimmer mt-1.5 h-7 w-16 rounded bg-[#3a3f46]" />
+              </div>
             ))}
           </div>
           <div className="mt-12">
             <SectionTitle>{secondSection}</SectionTitle>
-            <div className="mt-4 flex gap-2">
-              {Array.from({ length: 3 }, (_, index) => (
-                <div key={index} className="h-8 w-24 animate-pulse rounded-full bg-[#252a31]" />
+            <div className="mt-3 flex gap-2">
+              {["w-[52px]", "w-[96px]", "w-[132px]"].map((width) => (
+                <div key={width} className={"insight-shimmer h-8 rounded-full border border-white/10 bg-[#252a31] " + width} />
               ))}
             </div>
-            <div className="relative mt-5 h-[150px] animate-pulse">
-              <div className="absolute inset-x-0 top-2 border-t border-white/10" />
-              <div className="absolute inset-x-0 top-1/2 border-t border-white/10" />
-              <div className="absolute inset-x-0 bottom-2 border-t border-white/10" />
+            <div className="relative mt-4 h-52 select-none">
+              <div className="absolute left-0 top-0 h-[calc(100%-1.5rem)] w-8">
+                <div className="insight-shimmer absolute left-0 top-0 h-3 w-6 rounded bg-[#252a31]" />
+                <div className="insight-shimmer absolute left-0 top-1/2 h-3 w-6 -translate-y-1/2 rounded bg-[#252a31]" />
+                <div className="insight-shimmer absolute bottom-0 left-0 h-3 w-4 rounded bg-[#252a31]" />
+              </div>
+              <div className="absolute inset-0 left-8 h-[calc(100%-1.5rem)]">
+                <div className="absolute inset-x-0 top-0 border-t border-white/10" />
+                <div className="absolute inset-x-0 top-1/2 border-t border-white/10" />
+                <div className="absolute inset-x-0 bottom-0 border-t border-white/10" />
+              </div>
+              <div className="absolute bottom-0 left-8 right-0 flex justify-between">
+                {["w-8", "w-8", "w-8"].map((width, index) => (
+                  <div key={index} className={"insight-shimmer h-3 rounded bg-[#252a31] " + width} />
+                ))}
+              </div>
+            </div>
+            <div className="mt-3 flex items-center gap-4 text-[12px]">
+              {["This reel", "Your typical reel"].map((label) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  <div className="insight-shimmer h-2 w-2 rounded-full bg-[#252a31]" />
+                  <div className={"insight-shimmer h-3 rounded bg-[#252a31] " + (label === "This reel" ? "w-12" : "w-24")} />
+                </div>
+              ))}
             </div>
           </div>
           <div className="mt-12">
             <SectionTitle>{tab === "Overview" ? "What impacts your views" : "More insights"}</SectionTitle>
-            <div className="mt-4 space-y-4">
+            <div className="mt-1 h-[19px] w-56 insight-shimmer rounded bg-[#252a31]" />
+            <div className="mt-4 divide-y divide-white/5">
               {Array.from({ length: 3 }, (_, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <div className="h-8 w-8 animate-pulse rounded-full bg-[#252a31]" />
-                  <div className="h-4 flex-1 animate-pulse rounded bg-[#252a31]" />
-                  <div className="h-4 w-12 animate-pulse rounded bg-[#252a31]" />
+                <div key={index} className="flex items-center gap-3 py-3.5">
+                  <div className="insight-shimmer h-[42px] w-[42px] rounded-full bg-[#252a31]" />
+                  <div className="insight-shimmer h-5 flex-1 rounded bg-[#252a31]" />
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="insight-shimmer h-5 w-12 rounded bg-[#252a31]" />
+                    <div className="insight-shimmer h-4 w-14 rounded bg-[#252a31]" />
+                  </div>
                 </div>
               ))}
             </div>

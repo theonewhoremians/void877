@@ -152,3 +152,28 @@
     -ms-overflow-style: none;
   }
 }
+
+@keyframes insight-shimmer {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(360%); }
+}
+
+.insight-shimmer {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.insight-shimmer::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 16%), transparent);
+  content: "";
+  pointer-events: none;
+  animation: insight-shimmer 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insight-shimmer::after { animation: none; }
+}
