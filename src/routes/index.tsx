@@ -800,6 +800,7 @@ function ReelInsightsPage() {
   const [thumbnailAspectRatio, setThumbnailAspectRatio] =
     useState<ThumbnailAspectRatio>("square");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isTrendLoading, setIsTrendLoading] = useState(false);
   const [topGap, setTopGap] = useState(false);
   const [isLayoutsOpen, setIsLayoutsOpen] = useState(false);
   const [savedLayouts, setSavedLayouts] = useState<SavedLayout[]>([]);
@@ -1209,6 +1210,11 @@ function ReelInsightsPage() {
       return next;
     });
   };
+  const showTrendLoading = () => {
+    setIsMoreMenuOpen(false);
+    setIsTrendLoading(true);
+    window.setTimeout(() => setIsTrendLoading(false), 650);
+  };
   const selectThumbnailAspectRatio = (ratio: ThumbnailAspectRatio) => {
     setThumbnailAspectRatio(ratio);
     try { localStorage.setItem(THUMBNAIL_ASPECT_RATIO_KEY, ratio); } catch {}
@@ -1360,9 +1366,14 @@ function ReelInsightsPage() {
               ariaLabel="Page title"
             />
           </button>
-          <div className="p-1 text-zinc-100" aria-hidden="true">
+          <button
+            type="button"
+            onClick={showTrendLoading}
+            aria-label="Reload insights"
+            className="p-1 text-zinc-100 hover:text-white"
+          >
             <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
-          </div>
+          </button>
           <div className="relative">
             <button
               onClick={() => {
@@ -2124,6 +2135,132 @@ function ReelInsightsPage() {
           emptyLabel="No saved likes patterns yet."
         />
       )}
+      {isTrendLoading && (
+        <TrendLoadingSkeleton
+          title={data.title}
+          thumb={thumb}
+          aspectRatio={thumbnailAspectRatio}
+          topGap={topGap}
+          tab={tab}
+        />
+      )}
+    </div>
+  );
+}
+
+function TrendLoadingSkeleton({
+  title,
+  thumb,
+  aspectRatio,
+  topGap,
+  tab,
+}: {
+  title: string;
+  thumb: string;
+  aspectRatio: ThumbnailAspectRatio;
+  topGap: boolean;
+  tab: Tab;
+}) {
+  const stats = [
+    <IgHeart key="likes" className="h-5 w-5" />,
+    <IgComment key="comments" className="h-5 w-5" />,
+    <IgRepost key="reposts" className="h-5 w-5" />,
+    <IgShare key="shares" className="h-5 w-5" />,
+    <IgBookmark key="saves" className="h-5 w-5" />,
+  ];
+  const firstSection = tab === "Overview"
+    ? "Summary"
+    : tab === "Engagement"
+      ? "Actions after viewing"
+      : "Who viewed your reel";
+  const secondSection = tab === "Overview"
+    ? "Views over time"
+    : tab === "Engagement"
+      ? "Engagement"
+      : "Top sources of views";
+
+  return (
+    <div
+      role="status"
+      aria-label="Loading insights"
+      className="fixed inset-0 z-[60] overflow-y-auto bg-[#0c0f14] text-zinc-100"
+    >
+      <div className="mx-auto max-w-md pb-6">
+        <header
+          className="flex items-center gap-3 bg-[#0c0f14] px-4 pb-3 pt-4"
+          style={{ paddingTop: topGap ? "calc(env(safe-area-inset-top, 0px) + 1.26rem)" : undefined }}
+        >
+          <ArrowLeft className="-ml-1 h-6 w-6 text-white/75" strokeWidth={2.25} />
+          <h1 className="ml-6 flex-1 truncate text-[20px] font-semibold tracking-tight">{title}</h1>
+          <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
+          <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
+        </header>
+        <div className="flex justify-center pt-5">
+          <div className={
+            "overflow-hidden rounded-lg " +
+            (aspectRatio === "square"
+              ? "aspect-square w-[min(62vw,244px)]"
+              : "aspect-[231/409] w-[min(32.2vw,231px)]")
+          }>
+            <img src={thumb} alt="" className="h-full w-full object-cover" />
+          </div>
+        </div>
+        <div className="mt-7 grid grid-cols-5 gap-2 px-6">
+          {stats.map((icon, index) => (
+            <div key={index} className="flex flex-col items-center gap-1.5 text-white/95">
+              <div className="flex h-7 items-center justify-center">{icon}</div>
+              <div className="h-5 w-9 animate-pulse rounded bg-[#252a31]" />
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 grid grid-cols-3 border-b border-white/10 px-2">
+          {(["Overview", "Engagement", "Audience"] as Tab[]).map((item) => (
+            <div
+              key={item}
+              className={
+                "relative py-2.5 text-center text-[15px] font-medium " +
+                (tab === item ? "text-zinc-100" : "text-white/45")
+              }
+            >
+              {item}
+              {tab === item && <span className="absolute bottom-[-1px] left-[20%] right-[20%] h-0.5 rounded-full bg-white" />}
+            </div>
+          ))}
+        </div>
+        <div className="px-4 pt-6">
+          <SectionTitle>{firstSection}</SectionTitle>
+          <div className="mt-6 grid grid-cols-2 gap-x-3 gap-y-3.5">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="h-[104px] animate-pulse rounded-2xl bg-[#252a31]" />
+            ))}
+          </div>
+          <div className="mt-12">
+            <SectionTitle>{secondSection}</SectionTitle>
+            <div className="mt-4 flex gap-2">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="h-8 w-24 animate-pulse rounded-full bg-[#252a31]" />
+              ))}
+            </div>
+            <div className="relative mt-5 h-[150px] animate-pulse">
+              <div className="absolute inset-x-0 top-2 border-t border-white/10" />
+              <div className="absolute inset-x-0 top-1/2 border-t border-white/10" />
+              <div className="absolute inset-x-0 bottom-2 border-t border-white/10" />
+            </div>
+          </div>
+          <div className="mt-12">
+            <SectionTitle>{tab === "Overview" ? "What impacts your views" : "More insights"}</SectionTitle>
+            <div className="mt-4 space-y-4">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="flex items-center gap-3">
+                  <div className="h-8 w-8 animate-pulse rounded-full bg-[#252a31]" />
+                  <div className="h-4 flex-1 animate-pulse rounded bg-[#252a31]" />
+                  <div className="h-4 w-12 animate-pulse rounded bg-[#252a31]" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
