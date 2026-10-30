@@ -799,7 +799,6 @@ function ReelInsightsPage() {
   const [originalImportedThumb, setOriginalImportedThumb] = useState("");
   const [thumbnailAspectRatio, setThumbnailAspectRatio] =
     useState<ThumbnailAspectRatio>("square");
-  const [isTrendMenuOpen, setIsTrendMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [topGap, setTopGap] = useState(false);
   const [isLayoutsOpen, setIsLayoutsOpen] = useState(false);
@@ -1015,7 +1014,7 @@ function ReelInsightsPage() {
   const downloadOriginalThumbnail = () =>
     downloadThumbnail(originalImportedThumb, "original-reel-thumbnail.jpg", () => setIsMoreMenuOpen(false));
   const downloadImportedThumbnail = () =>
-    downloadThumbnail(importedThumb, "imported-reel-thumbnail.jpg", () => setIsTrendMenuOpen(false));
+    downloadThumbnail(importedThumb, "imported-reel-thumbnail.jpg", () => setIsMoreMenuOpen(false));
   const handleHeaderSave = () => {
     if (document.activeElement instanceof HTMLElement)
       document.activeElement.blur();
@@ -1361,37 +1360,13 @@ function ReelInsightsPage() {
               ariaLabel="Page title"
             />
           </button>
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                setIsTrendMenuOpen((open) => !open);
-                setIsMoreMenuOpen(false);
-              }}
-              aria-label="Thumbnail options"
-              aria-expanded={isTrendMenuOpen}
-              className="p-1 text-zinc-100 hover:text-white"
-            >
-              <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
-            </button>
-            {isTrendMenuOpen && (
-              <div className="absolute right-0 top-10 z-30 w-56 rounded-xl border border-white/15 bg-zinc-950 p-1.5 shadow-2xl">
-                <button
-                  type="button"
-                  disabled={!importedThumb}
-                  onClick={downloadImportedThumbnail}
-                  className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-white/35"
-                >
-                  {importedThumb ? "Download imported thumbnail" : "Import a thumbnail first"}
-                </button>
-              </div>
-            )}
+          <div className="p-1 text-zinc-100" aria-hidden="true">
+            <TrendingUp className="h-6 w-6" strokeWidth={2.25} />
           </div>
           <div className="relative">
             <button
               onClick={() => {
                 setIsMoreMenuOpen((open) => !open);
-                setIsTrendMenuOpen(false);
               }}
               aria-label="More options"
               aria-expanded={isMoreMenuOpen}
@@ -1400,13 +1375,21 @@ function ReelInsightsPage() {
               <MoreVertical className="h-6 w-6" strokeWidth={2.25} />
             </button>
             {isMoreMenuOpen && (
-              <div className="absolute right-0 top-10 z-30 w-52 rounded-xl border border-white/15 bg-zinc-950 p-1.5 shadow-2xl">
+              <div className="absolute right-0 top-10 z-30 w-56 rounded-xl border border-white/15 bg-zinc-950 p-1.5 shadow-2xl">
                 <button
                   type="button"
                   onClick={openImport}
                   className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10"
                 >
                   Import Instagram reel
+                </button>
+                <button
+                  type="button"
+                  disabled={!importedThumb}
+                  onClick={downloadImportedThumbnail}
+                  className="w-full rounded-lg px-3 py-2.5 text-left text-sm text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-white/35"
+                >
+                  {importedThumb ? "Download imported thumbnail" : "Import a thumbnail first"}
                 </button>
                 <button
                   type="button"
